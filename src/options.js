@@ -63,7 +63,7 @@ async function loadTags(baseUrl, token, selectedIds) {
 
   try {
     const url    = baseUrl.replace(/\/+$/, '') + '/api/tags/?page_size=500';
-    const res    = await fetch(url, { headers: { Authorization: `Token ${token}` } });
+    const res    = await fetch(url, { headers: { Authorization: `Token ${token}`, Accept: 'application/json' }, credentials: 'include' });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data   = await res.json();
     const tags   = data.results || [];
@@ -142,8 +142,9 @@ elBtnTest.addEventListener('click', async () => {
   elBtnTest.disabled = true;
 
   try {
-    const res = await fetch(url.replace(/\/+$/, '') + '/api/', {
-      headers: { Authorization: `Token ${token}` },
+    const res = await fetch(url.replace(/\/+$/, '') + '/api/documents/?page_size=1', {
+      headers: { Authorization: `Token ${token}`, Accept: 'application/json' },
+      credentials: 'include',
     });
 
     const bodyText = await res.text();
@@ -161,7 +162,7 @@ elBtnTest.addEventListener('click', async () => {
       throw new Error(`Keine JSON-Antwort (HTTP ${res.status}). Server antwortete: ${snippet}`);
     }
 
-    if (!data.documents) throw new Error('Keine gültige Paperless-API-Antwort.');
+    if (typeof data.count !== 'number') throw new Error('Keine gültige Paperless-API-Antwort.');
     showStatus('ok', 'Verbindung OK');
     await loadTags(url, token, getSelectedTagIds());
   } catch (e) {
