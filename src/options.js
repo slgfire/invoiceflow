@@ -93,8 +93,31 @@ async function loadTags(baseUrl, token, selectedIds) {
 
 // ─── Connection test ──────────────────────────────────────────────────────────
 
-// Verbindungstest läuft im Options-Page-Kontext (kein Service Worker) →
-// mTLS-Client-Zertifikate aus dem Browser-Store werden automatisch verwendet.
+// ─── Host-Permission für Paperless-URL anfordern ─────────────────────────────
+// Ohne diese Erlaubnis blockiert der Browser CORS-Anfragen von der Extension
+// an die Paperless-URL (chrome-extension:// Origin ist nicht erlaubt).
+// chrome.permissions.request() muss durch eine User-Geste ausgelöst werden.
+
+async function requestHostPermission(url) {
+  try {
+    const origin  = new URL(url).origin + '/*';
+    const granted = await chrome.permissions.request({ origins: [origin] });
+    return granted;
+  } catch {
+    return false;
+  }
+}
+
+async function hasHostPermission(url) {
+  try {
+    const origin = new URL(url).origin + '/*';
+    return chrome.permissions.contains({ origins: [origin] });
+  } catch {
+    return false;
+  }
+}
+
+// Verbindungstest — fordert zuerst Host-Permission an (CORS-Fix), dann Test.
 elBtnTest.addEventListener('click', async () => {
   const url   = elUrl.value.trim();
   const token = elToken.value.trim();
@@ -102,6 +125,17 @@ elBtnTest.addEventListener('click', async () => {
   if (!url || !token) {
     showStatus('error', 'URL und Token eingeben.');
     return;
+  }
+
+  // Host-Permission sicherstellen (einmaliger Browser-Dialog)
+  const already = await hasHostPermission(url);
+  if (!already) {
+    showStatus('testing', 'Bitte Zugriff auf Paperless-URL erlauben…');
+    const granted = await requestHostPermission(url);
+    if (!granted) {
+      showStatus('error', 'Zugriff verweigert — CORS-Anfragen werden blockiert.');
+      return;
+    }
   }
 
   showStatus('testing', 'Teste Verbindung…');
@@ -138,6 +172,16 @@ elBtnSave.addEventListener('click', async () => {
   if (!url || !token) {
     showSaveMsg('error', 'Bitte URL und Token angeben.');
     return;
+  }
+
+  // Host-Permission für die Paperless-URL sicherstellen
+  const already = await hasHostPermission(url);
+  if (!already) {
+    const granted = await requestHostPermission(url);
+    if (!granted) {
+      showSaveMsg('error', 'Zugriff auf Paperless-URL nicht erteilt — Verbindung wird fehlschlagen.');
+      return;
+    }
   }
 
   const range       = document.querySelector('input[name="dateRange"]:checked')?.value || 'currentYear';
