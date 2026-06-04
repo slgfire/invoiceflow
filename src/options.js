@@ -145,8 +145,22 @@ elBtnTest.addEventListener('click', async () => {
     const res = await fetch(url.replace(/\/+$/, '') + '/api/', {
       headers: { Authorization: `Token ${token}` },
     });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const data = await res.json();
+
+    const bodyText = await res.text();
+
+    if (!res.ok) {
+      const snippet = bodyText.slice(0, 120).replace(/\s+/g, ' ');
+      throw new Error(`HTTP ${res.status} — ${snippet}`);
+    }
+
+    let data;
+    try {
+      data = JSON.parse(bodyText);
+    } catch {
+      const snippet = bodyText.slice(0, 120).replace(/\s+/g, ' ');
+      throw new Error(`Keine JSON-Antwort (HTTP ${res.status}). Server antwortete: ${snippet}`);
+    }
+
     if (!data.documents) throw new Error('Keine gültige Paperless-API-Antwort.');
     showStatus('ok', 'Verbindung OK');
     await loadTags(url, token, getSelectedTagIds());
