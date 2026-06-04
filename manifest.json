@@ -1,0 +1,83 @@
+{
+  "manifest_version": 3,
+  "name": "InvoiceFlow",
+  "version": "0.1.0",
+  "description": "Lädt Rechnungen von Amazon, eBay, Zalando & Co automatisch in Paperless-ngx hoch.",
+
+  "permissions": [
+    "storage",
+    "tabs",
+    "scripting",
+    "activeTab"
+  ],
+
+  "host_permissions": [
+    "*://*.amazon.de/*",
+    "*://*.amazon.com/*",
+    "*://*.amazon.co.uk/*",
+    "*://*.amazon.fr/*",
+    "*://*.amazon.it/*",
+    "*://*.amazon.es/*",
+    "*://*.ebay.de/*",
+    "*://*.zalando.de/*",
+    "*://*.mediamarkt.de/*",
+    "*://*.otto.de/*"
+  ],
+
+  "background": {
+    "service_worker": "src/background.js",
+    "type": "module"
+  },
+
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16":  "icons/icon16.png",
+      "48":  "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+
+  "options_page": "options.html",
+
+  "icons": {
+    "16":  "icons/icon16.png",
+    "48":  "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+
+  "content_scripts": [
+    {
+      "matches": [
+        "*://*.amazon.de/*",
+        "*://*.amazon.com/*",
+        "*://*.amazon.co.uk/*",
+        "*://*.amazon.fr/*",
+        "*://*.amazon.it/*",
+        "*://*.amazon.es/*"
+      ],
+      "js": ["src/content.js", "src/plugins/amazon.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["*://*.ebay.de/*"],
+      "js": ["src/content.js", "src/plugins/ebay.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["*://*.zalando.de/*"],
+      "js": ["src/content.js", "src/plugins/zalando.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["*://*.mediamarkt.de/*"],
+      "js": ["src/content.js", "src/plugins/mediamarkt.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["*://*.otto.de/*"],
+      "js": ["src/content.js", "src/plugins/otto.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}
