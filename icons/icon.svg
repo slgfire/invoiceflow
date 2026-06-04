@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <!-- Background -->
+  <rect width="128" height="128" rx="22" fill="#2563eb"/>
+
+  <!-- Document body -->
+  <rect x="26" y="18" width="58" height="76" rx="5" fill="white"/>
+
+  <!-- Folded corner -->
+  <polygon points="68,18 84,34 68,34" fill="#bfdbfe"/>
+
+  <!-- Document lines -->
+  <rect x="34" y="44" width="36" height="4" rx="2" fill="#93c5fd"/>
+  <rect x="34" y="54" width="28" height="4" rx="2" fill="#93c5fd"/>
+  <rect x="34" y="64" width="32" height="4" rx="2" fill="#93c5fd"/>
+  <rect x="34" y="74" width="22" height="4" rx="2" fill="#93c5fd"/>
+
+  <!-- Upload arrow (right side) -->
+  <line x1="100" y1="90" x2="100" y2="54" stroke="white" stroke-width="7" stroke-linecap="round"/>
+  <polyline points="86,68 100,54 114,68" fill="none" stroke="white" stroke-width="7"
+            stroke-linecap="round" stroke-linejoin="round"/>
+
+  <!-- Arrow base / cloud hint -->
+  <line x1="88" y1="94" x2="112" y2="94" stroke="white" stroke-width="6" stroke-linecap="round"/>
+</svg>

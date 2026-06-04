@@ -1,0 +1,142 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - 'feature/**'
+      - 'fix/**'
+      - 'release/**'
+  pull_request:
+    branches:
+      - 'release/**'
+      - main
+
+jobs:
+  # ─── Statische Prüfungen ──────────────────────────────────────────────────
+  validate:
+    name: Validate extension
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate manifest.json
+        run: |
+          node -e "
+            const m = JSON.parse(require('fs').readFileSync('manifest.json'));
+            if (m.manifest_version !== 3) { console.error('Expected manifest_version 3'); process.exit(1); }
+            if (!m.version) { console.error('Missing version field'); process.exit(1); }
+            console.log('manifest.json OK  (version ' + m.version + ')');
+          "
+
+      - name: Syntax-check all JS files
+        run: |
+          FAILED=0
+          for f in src/background.js src/content.js src/options.js src/popup.js src/plugins/*.js; do
+            if node --check "$f" 2>&1; then
+              echo "  OK  $f"
+            else
+              echo "  FAIL $f"
+              FAILED=1
+            fi
+          done
+          exit $FAILED
+
+      - name: Check extension files exist
+        run: |
+          MISSING=0
+          for f in manifest.json popup.html options.html \
+                   src/background.js src/content.js src/paperless.js \
+                   src/popup.js src/options.js \
+                   src/plugins/amazon.js src/plugins/ebay.js \
+                   src/plugins/zalando.js src/plugins/mediamarkt.js src/plugins/otto.js \
+                   icons/icon16.png icons/icon48.png icons/icon128.png; do
+            if [ ! -f "$f" ]; then
+              echo "  MISSING: $f"
+              MISSING=1
+            fi
+          done
+          [ $MISSING -eq 0 ] && echo "All required files present." || exit 1
+
+  # ─── PR nach main: nur release/* erlaubt ─────────────────────────────────
+  enforce-branch-policy:
+    name: Enforce branch policy
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request' && github.base_ref == 'main'
+
+    steps:
+      - name: Source branch must be release/*
+        run: |
+          SOURCE="${{ github.head_ref }}"
+          echo "PR source branch: $SOURCE"
+          if [[ ! "$SOURCE" =~ ^release/ ]]; then
+            echo ""
+            echo "ERROR: Direkte PRs nach main sind nicht erlaubt."
+            echo "       Nur release/* Branches dürfen in main gemerged werden."
+            echo "       Aktueller Branch: $SOURCE"
+            echo ""
+            echo "Korrekter Workflow:"
+            echo "  feature/xyz  ──►  release/x.y.z  ──►  main"
+            echo "  fix/xyz      ──►  release/x.y.z  ──►  main"
+            exit 1
+          fi
+          echo "Branch policy OK: $SOURCE → main"
+
+      - uses: actions/checkout@v4
+
+      - name: Version in manifest.json muss zum Branch passen
+        run: |
+          SOURCE="${{ github.head_ref }}"
+          BRANCH_VERSION="${SOURCE#release/}"
+          MANIFEST_VERSION=$(node -e "console.log(require('./manifest.json').version)")
+
+          echo "Branch-Version:   $BRANCH_VERSION"
+          echo "Manifest-Version: $MANIFEST_VERSION"
+
+          if [ "$BRANCH_VERSION" != "$MANIFEST_VERSION" ]; then
+            echo ""
+            echo "ERROR: manifest.json version ($MANIFEST_VERSION) stimmt nicht"
+            echo "       mit dem Branch-Namen ($SOURCE → $BRANCH_VERSION) überein."
+            echo "       Bitte manifest.json anpassen."
+            exit 1
+          fi
+          echo "Versionen stimmen überein: $MANIFEST_VERSION"
+
+  # ─── Build-Test (gleiche Logik wie Release) ───────────────────────────────
+  build:
+    name: Build extension zip
+    runs-on: ubuntu-latest
+    needs: validate
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build zip
+        run: |
+          VERSION=$(node -e "console.log(require('./manifest.json').version)")
+          ZIP="invoiceflow-v${VERSION}.zip"
+
+          zip -r "$ZIP" \
+            manifest.json \
+            popup.html \
+            options.html \
+            src/ \
+            icons/icon16.png \
+            icons/icon48.png \
+            icons/icon128.png \
+            --exclude "*.DS_Store"
+
+          echo "ZIP=$ZIP" >> $GITHUB_ENV
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+
+          SIZE=$(du -k "$ZIP" | cut -f1)
+          echo ""
+          echo "Build OK: $ZIP (${SIZE} KB)"
+          unzip -l "$ZIP"
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: invoiceflow-v${{ env.VERSION }}
+          path: ${{ env.ZIP }}
+          retention-days: 7

@@ -1,0 +1,99 @@
+name: Release
+
+# Läuft wenn ein release/* Branch in main gemerged wird.
+# Erstellt automatisch ein Git-Tag und ein GitHub Release mit der fertig
+# gepackten Extension als ZIP-Anhang.
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  release:
+    name: Build & publish release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write   # für git tag + GitHub Release
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # für --generate-notes (braucht volle History)
+
+      # ─── Version ──────────────────────────────────────────────────────────
+      - name: Read version from manifest.json
+        id: ver
+        run: |
+          VERSION=$(node -e "console.log(require('./manifest.json').version)")
+          echo "version=$VERSION"   >> $GITHUB_OUTPUT
+          echo "tag=v$VERSION"      >> $GITHUB_OUTPUT
+          echo "zip=invoiceflow-v${VERSION}.zip" >> $GITHUB_OUTPUT
+
+      # ─── Duplikat-Schutz ──────────────────────────────────────────────────
+      - name: Abort if tag already exists
+        run: |
+          TAG="${{ steps.ver.outputs.tag }}"
+          if git ls-remote --tags origin | grep -q "refs/tags/${TAG}$"; then
+            echo "ERROR: Tag $TAG existiert bereits."
+            echo "       Bitte die Version in manifest.json erhöhen."
+            exit 1
+          fi
+          echo "Tag $TAG ist neu – fahre fort."
+
+      # ─── Validierung (gleich wie CI) ──────────────────────────────────────
+      - name: Validate manifest.json
+        run: |
+          node -e "
+            const m = JSON.parse(require('fs').readFileSync('manifest.json'));
+            if (m.manifest_version !== 3) throw new Error('Expected MV3');
+            if (!m.version) throw new Error('Missing version');
+            console.log('manifest.json OK');
+          "
+
+      - name: Syntax-check JS files
+        run: |
+          for f in src/background.js src/content.js src/options.js src/popup.js src/plugins/*.js; do
+            node --check "$f" || exit 1
+          done
+          echo "All JS files OK."
+
+      # ─── ZIP bauen ────────────────────────────────────────────────────────
+      - name: Build extension zip
+        run: |
+          ZIP="${{ steps.ver.outputs.zip }}"
+
+          zip -r "$ZIP" \
+            manifest.json \
+            popup.html \
+            options.html \
+            src/ \
+            icons/icon16.png \
+            icons/icon48.png \
+            icons/icon128.png \
+            --exclude "*.DS_Store"
+
+          echo ""
+          echo "=== ZIP-Inhalt ==="
+          unzip -l "$ZIP"
+          echo ""
+          echo "Größe: $(du -k "$ZIP" | cut -f1) KB"
+
+      # ─── Release erstellen ────────────────────────────────────────────────
+      - name: Create GitHub Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ steps.ver.outputs.tag }}"
+          ZIP="${{ steps.ver.outputs.zip }}"
+          VERSION="${{ steps.ver.outputs.version }}"
+
+          gh release create "$TAG" \
+            --title "InvoiceFlow ${TAG}" \
+            --generate-notes \
+            --verify-tag=false \
+            "$ZIP#InvoiceFlow ${VERSION} (Chrome/Edge Extension)"
+
+          echo ""
+          echo "Release erstellt: $TAG"
+          echo "https://github.com/${{ github.repository }}/releases/tag/$TAG"

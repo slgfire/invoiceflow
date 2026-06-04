@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>InvoiceFlow — Einstellungen</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      font-size: 14px;
+      background: #f1f5f9;
+      color: #1e293b;
+      min-height: 100vh;
+      padding: 32px 16px;
+    }
+
+    .container {
+      max-width: 560px;
+      margin: 0 auto;
+    }
+
+    .header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 28px;
+    }
+    .header img { width: 36px; height: 36px; }
+    .header h1  { font-size: 20px; font-weight: 700; color: #1e293b; }
+
+    .card {
+      background: #fff;
+      border-radius: 12px;
+      padding: 20px 24px;
+      margin-bottom: 16px;
+      box-shadow: 0 1px 3px rgba(0,0,0,.07), 0 1px 2px rgba(0,0,0,.05);
+    }
+
+    .card h2 {
+      font-size: 13px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: .05em;
+      color: #64748b;
+      margin-bottom: 16px;
+    }
+
+    .field { margin-bottom: 14px; }
+    .field:last-child { margin-bottom: 0; }
+
+    label {
+      display: block;
+      font-size: 13px;
+      font-weight: 500;
+      color: #374151;
+      margin-bottom: 5px;
+    }
+
+    input[type="text"],
+    input[type="url"],
+    input[type="password"],
+    input[type="date"],
+    select {
+      width: 100%;
+      padding: 8px 11px;
+      border: 1px solid #d1d5db;
+      border-radius: 7px;
+      font-size: 13px;
+      color: #1e293b;
+      background: #fff;
+      transition: border-color .15s;
+      outline: none;
+    }
+    input:focus, select:focus {
+      border-color: #2563eb;
+      box-shadow: 0 0 0 3px rgba(37,99,235,.12);
+    }
+
+    .input-row {
+      display: flex;
+      gap: 8px;
+    }
+    .input-row input { flex: 1; }
+
+    .btn {
+      padding: 8px 16px;
+      border: none;
+      border-radius: 7px;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background .15s, transform .1s;
+      white-space: nowrap;
+    }
+    .btn:active { transform: scale(.97); }
+    .btn-primary  { background: #2563eb; color: #fff; }
+    .btn-primary:hover  { background: #1d4ed8; }
+    .btn-secondary { background: #f1f5f9; color: #374151; border: 1px solid #d1d5db; }
+    .btn-secondary:hover { background: #e2e8f0; }
+
+    .connection-status {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      padding: 4px 10px;
+      border-radius: 20px;
+      margin-left: 8px;
+    }
+    .status-ok      { background: #dcfce7; color: #16a34a; }
+    .status-error   { background: #fee2e2; color: #dc2626; }
+    .status-testing { background: #fef3c7; color: #d97706; }
+
+    .shops-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+
+    .shop-toggle {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 12px;
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: background .15s, border-color .15s;
+    }
+    .shop-toggle:hover { background: #f8fafc; }
+    .shop-toggle input[type="checkbox"] { accent-color: #2563eb; width: 15px; height: 15px; cursor: pointer; }
+    .shop-toggle span { font-size: 13px; font-weight: 500; }
+
+    .radio-group { display: flex; flex-direction: column; gap: 8px; }
+    .radio-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      cursor: pointer;
+    }
+    .radio-item input[type="radio"] { accent-color: #2563eb; width: 15px; height: 15px; cursor: pointer; }
+    .radio-item span { font-size: 13px; }
+
+    .date-range-custom {
+      display: none;
+      margin-top: 10px;
+      gap: 8px;
+    }
+    .date-range-custom.visible { display: flex; }
+    .date-range-custom label { font-size: 12px; color: #64748b; margin-bottom: 3px; }
+
+    .tags-container {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 7px;
+      margin-top: 8px;
+      min-height: 32px;
+    }
+    .tag-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 3px 10px 3px 8px;
+      border-radius: 20px;
+      border: 1px solid #d1d5db;
+      font-size: 12px;
+      cursor: pointer;
+      transition: background .12s, border-color .12s;
+      user-select: none;
+    }
+    .tag-chip:hover   { border-color: #2563eb; background: #eff6ff; }
+    .tag-chip.selected { background: #2563eb; border-color: #2563eb; color: #fff; }
+    .tag-chip input { display: none; }
+
+    .tags-hint { font-size: 12px; color: #94a3b8; margin-top: 6px; }
+
+    .save-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-top: 20px;
+      padding-top: 20px;
+      border-top: 1px solid #f1f5f9;
+    }
+    .save-msg { font-size: 12px; }
+    .save-msg.ok    { color: #16a34a; }
+    .save-msg.error { color: #dc2626; }
+  </style>
+</head>
+<body>
+<div class="container">
+
+  <div class="header">
+    <img src="icons/icon48.png" alt="">
+    <h1>InvoiceFlow — Einstellungen</h1>
+  </div>
+
+  <!-- Paperless-ngx -->
+  <div class="card">
+    <h2>Paperless-ngx</h2>
+
+    <div class="field">
+      <label for="paperlessUrl">Server-URL</label>
+      <input type="url" id="paperlessUrl" placeholder="https://paperless.example.com">
+    </div>
+
+    <div class="field">
+      <label for="paperlessToken">API-Token</label>
+      <div class="input-row">
+        <input type="password" id="paperlessToken" placeholder="Token aus Paperless-Einstellungen">
+        <button class="btn btn-secondary" id="btnTest">Verbindung testen</button>
+        <span id="connectionStatus" style="display:none" class="connection-status"></span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Standard-Zeitraum -->
+  <div class="card">
+    <h2>Standard-Zeitraum</h2>
+    <div class="radio-group">
+      <label class="radio-item">
+        <input type="radio" name="dateRange" value="currentYear" checked>
+        <span>Aktuelles Jahr</span>
+      </label>
+      <label class="radio-item">
+        <input type="radio" name="dateRange" value="last30">
+        <span>Letzte 30 Tage</span>
+      </label>
+      <label class="radio-item">
+        <input type="radio" name="dateRange" value="lastMonth">
+        <span>Letzter Monat</span>
+      </label>
+      <label class="radio-item">
+        <input type="radio" name="dateRange" value="custom">
+        <span>Benutzerdefiniert</span>
+      </label>
+    </div>
+    <div class="date-range-custom" id="customRangeFields">
+      <div>
+        <label>Von</label>
+        <input type="date" id="customFrom">
+      </div>
+      <div>
+        <label>Bis</label>
+        <input type="date" id="customTo">
+      </div>
+    </div>
+  </div>
+
+  <!-- Shops -->
+  <div class="card">
+    <h2>Shops aktivieren</h2>
+    <div class="shops-grid">
+      <label class="shop-toggle">
+        <input type="checkbox" id="shopAmazon" value="amazon" checked>
+        <span>Amazon.de/com/…</span>
+      </label>
+      <label class="shop-toggle">
+        <input type="checkbox" id="shopEbay" value="ebay" checked>
+        <span>eBay.de</span>
+      </label>
+      <label class="shop-toggle">
+        <input type="checkbox" id="shopZalando" value="zalando">
+        <span>Zalando.de</span>
+      </label>
+      <label class="shop-toggle">
+        <input type="checkbox" id="shopMediamarkt" value="mediamarkt">
+        <span>MediaMarkt.de</span>
+      </label>
+      <label class="shop-toggle">
+        <input type="checkbox" id="shopOtto" value="otto">
+        <span>Otto.de</span>
+      </label>
+    </div>
+  </div>
+
+  <!-- Tags -->
+  <div class="card">
+    <h2>Paperless-Tags (optional)</h2>
+    <p style="font-size:12px;color:#64748b;margin-bottom:10px;">
+      Tags werden erst geladen, wenn du eine gültige Verbindung gespeichert hast.
+    </p>
+    <div class="tags-container" id="tagsContainer">
+      <span style="font-size:12px;color:#94a3b8;">Noch keine Tags geladen.</span>
+    </div>
+  </div>
+
+  <!-- Speichern -->
+  <div class="save-row">
+    <button class="btn btn-primary" id="btnSave">Einstellungen speichern</button>
+    <span class="save-msg" id="saveMsg"></span>
+  </div>
+
+</div>
+<script src="src/options.js"></script>
+</body>
+</html>
