@@ -30,7 +30,7 @@ window.InvoiceFlowPlugin = (() => {
                  '.order-header .a-column:nth-child(2) .a-color-secondary',
     // Direkter Rechnungslink auf der Übersichtsseite
     invoiceLink: 'a[href*="invoice/getinvoice"], a[href*="/invoice?"], ' +
-                 'a[href*="invoice/print"]',
+                 'a[href*="invoice/print"], a[href*="invoice/popover"]',
     // Link zur Detailseite der Bestellung
     detailLink:  'a[href*="order-details"], a[href*="orderID="]',
     // Pagination "Weiter"-Link
@@ -152,6 +152,23 @@ window.InvoiceFlowPlugin = (() => {
   }
 
   /**
+   * Löst einen invoice/popover-Link auf, indem das HTML-Fragment geladen
+   * und der darin enthaltene /documents/download/…/invoice.pdf-Link extrahiert wird.
+   */
+  async function _resolvePopoverToPdf(popoverUrl, baseUrl) {
+    const resp = await fetch(popoverUrl, {
+      credentials: 'include',
+      headers: { Accept: 'text/html,*/*', 'Accept-Language': navigator.language || 'de-DE' },
+    });
+    if (!resp.ok) return null;
+    const html = await resp.text();
+    const m = html.match(/href="([^"]*\/documents\/download\/[^"]+\.pdf[^"]*)"/);
+    if (!m) return null;
+    const href = m[1].replace(/&amp;/g, '&');
+    return href.startsWith('http') ? href : baseUrl + href;
+  }
+
+  /**
    * Extrahiert alle Bestellungen aus einem Übersichts-Dokument,
    * filtert nach Zeitraum und gibt eine Liste von Invoice-Objekten zurück.
    * Bestellungen, bei denen der Rechnungslink erst auf der Detailseite steht,
@@ -264,7 +281,7 @@ window.InvoiceFlowPlugin = (() => {
 
           const pageInvoices = _parseOrderCards(doc, dateFrom, dateTo, baseUrl);
 
-          // Detailseiten für Bestellungen ohne direkten Rechnungslink
+          // Detailseiten / Popover für Bestellungen ohne direkten PDF-Link
           for (const inv of pageInvoices) {
             if (inv.invoiceUrl.startsWith('__DETAIL__:')) {
               const detailUrl = inv.invoiceUrl.slice('__DETAIL__:'.length);
@@ -272,6 +289,13 @@ window.InvoiceFlowPlugin = (() => {
               const resolved = await _resolveFromDetailPage(detailUrl, baseUrl).catch(() => null);
               if (resolved) {
                 inv.invoiceUrl = resolved;
+                allInvoices.push(inv);
+              }
+            } else if (inv.invoiceUrl.includes('invoice/popover')) {
+              await _sleep(200 + Math.random() * 300);
+              const pdfUrl = await _resolvePopoverToPdf(inv.invoiceUrl, baseUrl).catch(() => null);
+              if (pdfUrl) {
+                inv.invoiceUrl = pdfUrl;
                 allInvoices.push(inv);
               }
             } else {
