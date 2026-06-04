@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>InvoiceFlow</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      font-size: 13px;
+      background: #f8fafc;
+      color: #1e293b;
+      width: 340px;
+      min-height: 240px;
+      overflow-x: hidden;
+    }
+
+    /* ─── Header ───────────────────────────────────────────────────────── */
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 14px 10px;
+      background: #2563eb;
+      color: #fff;
+    }
+    .header-left { display: flex; align-items: center; gap: 8px; }
+    .header img  { width: 22px; height: 22px; }
+    .header h1   { font-size: 15px; font-weight: 700; letter-spacing: -.01em; }
+    .btn-settings {
+      background: none;
+      border: none;
+      color: rgba(255,255,255,.8);
+      cursor: pointer;
+      padding: 4px;
+      border-radius: 5px;
+      line-height: 1;
+      font-size: 16px;
+      transition: color .15s;
+    }
+    .btn-settings:hover { color: #fff; }
+
+    /* ─── Main content ─────────────────────────────────────────────────── */
+    .content { padding: 12px 14px; display: flex; flex-direction: column; gap: 12px; }
+
+    /* ─── No-config warning ────────────────────────────────────────────── */
+    .no-config {
+      background: #fef3c7;
+      border: 1px solid #fcd34d;
+      border-radius: 8px;
+      padding: 10px 12px;
+      font-size: 12px;
+      color: #92400e;
+      display: none;
+    }
+    .no-config a { color: #1d4ed8; cursor: pointer; text-decoration: underline; }
+
+    /* ─── Section label ────────────────────────────────────────────────── */
+    .section-label {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: .05em;
+      color: #94a3b8;
+      margin-bottom: 5px;
+    }
+
+    /* ─── Shop checkboxes ──────────────────────────────────────────────── */
+    .shops-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px;
+    }
+    .shop-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 8px;
+      border: 1px solid #e5e7eb;
+      border-radius: 7px;
+      cursor: pointer;
+      background: #fff;
+      transition: background .12s, border-color .12s;
+    }
+    .shop-item:hover { background: #f0f9ff; border-color: #93c5fd; }
+    .shop-item input { accent-color: #2563eb; width: 13px; height: 13px; cursor: pointer; }
+    .shop-item span  { font-size: 12px; font-weight: 500; }
+    .shop-item.disabled { opacity: .45; cursor: not-allowed; }
+
+    /* ─── Date range ───────────────────────────────────────────────────── */
+    .date-row {
+      display: flex;
+      gap: 7px;
+      align-items: center;
+    }
+    select, input[type="date"] {
+      border: 1px solid #d1d5db;
+      border-radius: 6px;
+      padding: 6px 8px;
+      font-size: 12px;
+      color: #1e293b;
+      background: #fff;
+      outline: none;
+      transition: border-color .15s;
+    }
+    select:focus, input[type="date"]:focus {
+      border-color: #2563eb;
+      box-shadow: 0 0 0 2px rgba(37,99,235,.12);
+    }
+    #yearSelect    { flex: 1; }
+    #dateFrom, #dateTo { flex: 1; }
+    .date-sep { color: #94a3b8; font-size: 11px; }
+
+    /* ─── Start button ─────────────────────────────────────────────────── */
+    .btn-start {
+      width: 100%;
+      padding: 9px;
+      background: #2563eb;
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background .15s, transform .1s;
+    }
+    .btn-start:hover:not(:disabled) { background: #1d4ed8; }
+    .btn-start:active:not(:disabled) { transform: scale(.98); }
+    .btn-start:disabled { background: #93c5fd; cursor: not-allowed; }
+    .btn-start.cancel   { background: #ef4444; }
+    .btn-start.cancel:hover { background: #dc2626; }
+
+    /* ─── Progress area ────────────────────────────────────────────────── */
+    .progress-area { display: none; flex-direction: column; gap: 8px; }
+    .progress-area.visible { display: flex; }
+
+    .progress-header {
+      display: flex;
+      justify-content: space-between;
+      font-size: 11px;
+      color: #64748b;
+    }
+    .progress-bar-track {
+      height: 6px;
+      background: #e2e8f0;
+      border-radius: 99px;
+      overflow: hidden;
+    }
+    .progress-bar-fill {
+      height: 100%;
+      background: #2563eb;
+      border-radius: 99px;
+      width: 0%;
+      transition: width .3s ease;
+    }
+
+    .current-item {
+      font-size: 11px;
+      color: #475569;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    /* ─── Log ──────────────────────────────────────────────────────────── */
+    .log {
+      background: #fff;
+      border: 1px solid #e5e7eb;
+      border-radius: 7px;
+      max-height: 130px;
+      overflow-y: auto;
+      padding: 6px 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+    .log-entry {
+      display: flex;
+      align-items: flex-start;
+      gap: 6px;
+      font-size: 11px;
+      line-height: 1.4;
+      animation: fadeIn .2s;
+    }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(-2px); } to { opacity: 1; } }
+
+    .log-icon { flex-shrink: 0; width: 14px; text-align: center; }
+    .log-text { color: #374151; word-break: break-all; }
+    .log-entry.ok     .log-icon { color: #16a34a; }
+    .log-entry.skip   .log-icon { color: #d97706; }
+    .log-entry.error  .log-icon { color: #dc2626; }
+    .log-entry.info   .log-icon { color: #2563eb; }
+
+    /* ─── Summary ──────────────────────────────────────────────────────── */
+    .summary {
+      display: none;
+      background: #f0fdf4;
+      border: 1px solid #bbf7d0;
+      border-radius: 8px;
+      padding: 10px 12px;
+      font-size: 12px;
+      gap: 4px;
+      flex-direction: column;
+    }
+    .summary.visible { display: flex; }
+    .summary strong  { color: #15803d; font-weight: 600; }
+    .summary span    { color: #374151; }
+  </style>
+</head>
+<body>
+
+<!-- Header -->
+<div class="header">
+  <div class="header-left">
+    <img src="icons/icon16.png" alt="">
+    <h1>InvoiceFlow</h1>
+  </div>
+  <button class="btn-settings" id="btnSettings" title="Einstellungen">⚙</button>
+</div>
+
+<div class="content">
+
+  <!-- Warnung: nicht konfiguriert -->
+  <div class="no-config" id="noConfig">
+    Paperless-ngx nicht konfiguriert.
+    <a id="linkSettings">Einstellungen öffnen →</a>
+  </div>
+
+  <!-- Shops -->
+  <div>
+    <div class="section-label">Shops</div>
+    <div class="shops-grid" id="shopsGrid">
+      <label class="shop-item"><input type="checkbox" value="amazon" checked><span>Amazon</span></label>
+      <label class="shop-item"><input type="checkbox" value="ebay"><span>eBay.de</span></label>
+      <label class="shop-item"><input type="checkbox" value="zalando"><span>Zalando</span></label>
+      <label class="shop-item"><input type="checkbox" value="mediamarkt"><span>MediaMarkt</span></label>
+      <label class="shop-item"><input type="checkbox" value="otto"><span>Otto</span></label>
+    </div>
+  </div>
+
+  <!-- Zeitraum -->
+  <div>
+    <div class="section-label">Zeitraum</div>
+    <div class="date-row" id="yearRow">
+      <select id="yearSelect"></select>
+      <span style="font-size:11px;color:#94a3b8;">oder</span>
+      <input type="date" id="dateFrom" placeholder="Von">
+      <span class="date-sep">–</span>
+      <input type="date" id="dateTo" placeholder="Bis">
+    </div>
+  </div>
+
+  <!-- Start/Cancel -->
+  <button class="btn-start" id="btnStart">Download starten</button>
+
+  <!-- Fortschritt -->
+  <div class="progress-area" id="progressArea">
+    <div class="progress-header">
+      <span id="progressShop">–</span>
+      <span id="progressCount">0 / 0</span>
+    </div>
+    <div class="progress-bar-track">
+      <div class="progress-bar-fill" id="progressBar"></div>
+    </div>
+    <div class="current-item" id="currentItem"></div>
+    <div class="log" id="logContainer"></div>
+  </div>
+
+  <!-- Zusammenfassung -->
+  <div class="summary" id="summary"></div>
+
+</div>
+
+<script src="src/popup.js"></script>
+</body>
+</html>
