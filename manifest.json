@@ -12,6 +12,11 @@
     "offscreen"
   ],
 
+  "optional_host_permissions": [
+    "https://*/*",
+    "http://*/*"
+  ],
+
   "host_permissions": [
     "*://*.amazon.de/*",
     "*://*.amazon.com/*",
