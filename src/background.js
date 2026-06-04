@@ -211,16 +211,22 @@ async function collectInvoicesViaNavigation(tabId, shopId, dateFrom, dateTo) {
     while (pageUrl) {
       if (activeJob?.cancelled) return all;
 
-      await chrome.tabs.update(tabId, { url: pageUrl });
-      await waitForTabLoad(tabId);
-      await sleep(2500); // JS-Rendering abwarten
+      // Frischer Tab pro Seite — garantiert saubere Content-Script-Injektion
+      const pageTab = await openTab(pageUrl);
+      try {
+        await waitForTabLoad(pageTab.id);
+        await sleep(4000); // CSD-Rendering abwarten
 
-      const result = await sendToTab(tabId, { action: 'GET_INVOICES_PAGE', dateFrom, dateTo }, 60_000);
-      if (result.error) throw new Error(result.error);
+        const result = await sendToTab(pageTab.id, { action: 'GET_INVOICES_PAGE', dateFrom, dateTo }, 45_000);
+        if (result.error) throw new Error(result.error);
 
-      all.push(...(result.invoices ?? []));
-      pageUrl = result.nextUrl || null;
-      if (pageUrl) await sleep(600 + Math.random() * 400);
+        all.push(...(result.invoices ?? []));
+        pageUrl = result.nextUrl || null;
+      } finally {
+        await chrome.tabs.remove(pageTab.id).catch(() => {});
+      }
+
+      if (pageUrl) await sleep(800 + Math.random() * 400);
     }
   }
 
