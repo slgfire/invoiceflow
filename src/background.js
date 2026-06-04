@@ -16,6 +16,9 @@ const SHOP_START_URL = {
   otto:       'https://www.otto.de/meinekonto/bestellungen',
 };
 
+// Shops mit Amazon-CSD-Problem: Tab-Navigation statt internes fetch()
+const SHOPS_USE_PAGE_NAVIGATION = new Set(['amazon']);
+
 // ─── Messaging ────────────────────────────────────────────────────────────────
 
 chrome.runtime.onConnect.addListener(port => {
@@ -118,10 +121,14 @@ async function startDownload(config) {
 
       emit({ type: 'SHOP_STATUS', shop: shopId, message: 'Lade Bestellliste…' });
 
-      const listResult = await sendToTab(tab.id, { action: 'GET_INVOICES', dateFrom, dateTo }, 120_000);
-      if (listResult.error) throw new Error(listResult.error);
-
-      const invoices = listResult.invoices ?? [];
+      let invoices;
+      if (SHOPS_USE_PAGE_NAVIGATION.has(shopId)) {
+        invoices = await collectInvoicesViaNavigation(tab.id, shopId, dateFrom, dateTo);
+      } else {
+        const listResult = await sendToTab(tab.id, { action: 'GET_INVOICES', dateFrom, dateTo }, 120_000);
+        if (listResult.error) throw new Error(listResult.error);
+        invoices = listResult.invoices ?? [];
+      }
       emit({ type: 'SHOP_INVOICES_FOUND', shop: shopId, count: invoices.length });
 
       for (let i = 0; i < invoices.length; i++) {
@@ -183,6 +190,41 @@ async function startDownload(config) {
   activeJob = null;
   await closeOffscreen();
   emit({ type: 'ALL_DONE', uploaded: totalUploaded, duplicates: totalDuplicates, errors: totalErrors });
+}
+
+// ─── Shop-spezifische Navigationsfunktion für CSD-geschützte Seiten ──────────
+
+async function collectInvoicesViaNavigation(tabId, shopId, dateFrom, dateTo) {
+  const yearFrom = new Date(dateFrom).getFullYear();
+  const yearTo   = new Date(dateTo).getFullYear();
+  const all      = [];
+
+  const baseUrls = {
+    amazon: 'https://www.amazon.de/gp/your-account/order-history',
+  };
+  const base = baseUrls[shopId];
+  if (!base) return all;
+
+  for (let year = yearTo; year >= yearFrom; year--) {
+    let pageUrl = `${base}?orderFilter=year-${year}`;
+
+    while (pageUrl) {
+      if (activeJob?.cancelled) return all;
+
+      await chrome.tabs.update(tabId, { url: pageUrl });
+      await waitForTabLoad(tabId);
+      await sleep(2500); // JS-Rendering abwarten
+
+      const result = await sendToTab(tabId, { action: 'GET_INVOICES_PAGE', dateFrom, dateTo }, 60_000);
+      if (result.error) throw new Error(result.error);
+
+      all.push(...(result.invoices ?? []));
+      pageUrl = result.nextUrl || null;
+      if (pageUrl) await sleep(600 + Math.random() * 400);
+    }
+  }
+
+  return all;
 }
 
 // ─── Hilfsfunktionen ─────────────────────────────────────────────────────────

@@ -20,7 +20,20 @@ if (!window.__invoiceFlowLoaded) {
         .getInvoices(message.dateFrom, message.dateTo)
         .then(invoices => sendResponse({ success: true, invoices }))
         .catch(err => sendResponse({ error: err.message }));
-      return true; // keep channel open for async response
+      return true;
+    }
+
+    if (message.action === 'GET_INVOICES_PAGE') {
+      if (typeof plugin.getInvoicesFromCurrentPage !== 'function') {
+        // Fallback für Plugins ohne DOM-basiertes Scraping
+        sendResponse({ error: 'GET_INVOICES_PAGE nicht unterstützt.' });
+        return false;
+      }
+      plugin
+        .getInvoicesFromCurrentPage(message.dateFrom, message.dateTo)
+        .then(result => sendResponse({ success: true, invoices: result.invoices, nextUrl: result.nextUrl }))
+        .catch(err => sendResponse({ error: err.message }));
+      return true;
     }
 
     if (message.action === 'FETCH_INVOICE') {
