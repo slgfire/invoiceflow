@@ -1,0 +1,12 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="UTF-8"><title>InvoiceFlow — Offscreen</title></head>
+<body>
+<!--
+  Dieses Dokument läuft im normalen Browser-Rendering-Kontext (kein Service Worker).
+  fetch() hier unterstützt mTLS-Client-Zertifikate aus dem Browser-Zertifikatsspeicher.
+  Der Service Worker leitet alle Paperless-API-Calls hierher weiter.
+-->
+<script type="module" src="src/offscreen.js"></script>
+</body>
+</html>
