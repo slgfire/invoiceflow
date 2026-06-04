@@ -11,7 +11,6 @@ const elSaveMsg = $('saveMsg');
 const elCustom  = $('customRangeFields');
 const elFrom    = $('customFrom');
 const elTo      = $('customTo');
-const elTags    = $('tagsContainer');
 
 const SHOP_IDS = ['amazon', 'ebay', 'zalando', 'mediamarkt', 'otto'];
 
@@ -21,7 +20,7 @@ async function load() {
   const s = await chrome.storage.sync.get([
     'paperlessUrl', 'paperlessToken',
     'defaultDateRange', 'customFrom', 'customTo',
-    'enabledShops', 'tagIds',
+    'enabledShops', 'shopTags', 'tagIds',
   ]);
 
   elUrl.value   = s.paperlessUrl   || '';
@@ -41,8 +40,15 @@ async function load() {
     if (el) el.checked = Boolean(enabled[id] ?? false);
   }
 
+  // Migrate legacy tagIds → shopTags (apply to all shops as default)
+  const legacyIds = s.tagIds || [];
+  const shopTags  = s.shopTags || {};
+  if (legacyIds.length > 0 && Object.keys(shopTags).length === 0) {
+    for (const id of SHOP_IDS) shopTags[id] = [...legacyIds];
+  }
+
   if (s.paperlessUrl && s.paperlessToken) {
-    await loadTags(s.paperlessUrl, s.paperlessToken, s.tagIds || []);
+    await loadAllTags(s.paperlessUrl, s.paperlessToken, shopTags);
   }
 }
 
@@ -58,36 +64,47 @@ document.querySelectorAll('input[name="dateRange"]').forEach(el => {
 
 // ─── Tags ─────────────────────────────────────────────────────────────────────
 
-async function loadTags(baseUrl, token, selectedIds) {
-  elTags.innerHTML = '<span style="font-size:12px;color:#94a3b8;">Lade Tags…</span>';
+async function loadAllTags(baseUrl, token, shopTags) {
+  const placeholder = '<span style="font-size:12px;color:#94a3b8;">Lade Tags…</span>';
+  for (const shopId of SHOP_IDS) {
+    const container = document.getElementById(`tags-${shopId}`);
+    if (container) container.innerHTML = placeholder;
+  }
 
+  let tags = [];
   try {
-    const url    = baseUrl.replace(/\/+$/, '') + '/api/tags/?page_size=500';
-    const res    = await fetch(url, { headers: { Authorization: `Token ${token}`, Accept: 'application/json' }, credentials: 'include' });
+    const url = baseUrl.replace(/\/+$/, '') + '/api/tags/?page_size=500';
+    const res = await fetch(url, { headers: { Authorization: `Token ${token}`, Accept: 'application/json' }, credentials: 'include' });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const data   = await res.json();
-    const tags   = data.results || [];
+    const data = await res.json();
+    tags = data.results || [];
+  } catch (e) {
+    const msg = `<span style="font-size:12px;color:#dc2626;">Tags konnten nicht geladen werden: ${e.message}</span>`;
+    for (const shopId of SHOP_IDS) {
+      const container = document.getElementById(`tags-${shopId}`);
+      if (container) container.innerHTML = msg;
+    }
+    return;
+  }
+
+  for (const shopId of SHOP_IDS) {
+    const container = document.getElementById(`tags-${shopId}`);
+    if (!container) continue;
 
     if (tags.length === 0) {
-      elTags.innerHTML = '<span style="font-size:12px;color:#94a3b8;">Keine Tags vorhanden.</span>';
-      return;
+      container.innerHTML = '<span style="font-size:12px;color:#94a3b8;">Keine Tags vorhanden.</span>';
+      continue;
     }
 
-    elTags.innerHTML = '';
+    const selectedIds = shopTags[shopId] || [];
+    container.innerHTML = '';
     for (const tag of tags) {
       const chip = document.createElement('label');
       chip.className = 'tag-chip' + (selectedIds.includes(tag.id) ? ' selected' : '');
-      chip.innerHTML = `
-        <input type="checkbox" value="${tag.id}" ${selectedIds.includes(tag.id) ? 'checked' : ''}>
-        ${tag.name}
-      `;
-      chip.addEventListener('change', e => {
-        chip.classList.toggle('selected', e.target.checked);
-      });
-      elTags.appendChild(chip);
+      chip.innerHTML = `<input type="checkbox" value="${tag.id}" ${selectedIds.includes(tag.id) ? 'checked' : ''}>${tag.name}`;
+      chip.addEventListener('change', e => chip.classList.toggle('selected', e.target.checked));
+      container.appendChild(chip);
     }
-  } catch (e) {
-    elTags.innerHTML = `<span style="font-size:12px;color:#dc2626;">Tags konnten nicht geladen werden: ${e.message}</span>`;
   }
 }
 
@@ -164,7 +181,7 @@ elBtnTest.addEventListener('click', async () => {
 
     if (typeof data.count !== 'number') throw new Error('Keine gültige Paperless-API-Antwort.');
     showStatus('ok', 'Verbindung OK');
-    await loadTags(url, token, getSelectedTagIds());
+    await loadAllTags(url, token, getShopTagIds());
   } catch (e) {
     showStatus('error', e.message);
   } finally {
@@ -213,16 +230,22 @@ elBtnSave.addEventListener('click', async () => {
     customFrom:       elFrom.value,
     customTo:         elTo.value,
     enabledShops,
-    tagIds:           getSelectedTagIds(),
+    shopTags:         getShopTagIds(),
   });
 
   showSaveMsg('ok', 'Gespeichert.');
   setTimeout(() => { elSaveMsg.textContent = ''; }, 3000);
 });
 
-function getSelectedTagIds() {
-  return Array.from(elTags.querySelectorAll('input[type="checkbox"]:checked'))
-    .map(el => Number(el.value));
+function getShopTagIds() {
+  const result = {};
+  for (const shopId of SHOP_IDS) {
+    const container = document.getElementById(`tags-${shopId}`);
+    result[shopId] = container
+      ? Array.from(container.querySelectorAll('input[type="checkbox"]:checked')).map(el => Number(el.value))
+      : [];
+  }
+  return result;
 }
 
 function showSaveMsg(type, text) {

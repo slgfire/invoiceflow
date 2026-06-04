@@ -84,7 +84,7 @@ function paperless(action, paperlessUrl, paperlessToken, params = {}) {
 // ─── Haupt-Download-Logik ─────────────────────────────────────────────────────
 
 async function startDownload(config) {
-  const { shops, dateFrom, dateTo, paperlessUrl, paperlessToken, tagIds = [] } = config;
+  const { shops, dateFrom, dateTo, paperlessUrl, paperlessToken, shopTags = {} } = config;
 
   await ensureOffscreen();
 
@@ -156,7 +156,7 @@ async function startDownload(config) {
           await paperless('UPLOAD_DOCUMENT', paperlessUrl, paperlessToken, {
             dataUrl:  fetchResult.dataUrl,
             filename: inv.filename,
-            tagIds,
+            tagIds:   shopTags[shopId] ?? [],
           });
 
           await addLocalCache(inv.orderId);
