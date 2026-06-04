@@ -93,6 +93,8 @@ async function loadTags(baseUrl, token, selectedIds) {
 
 // ─── Connection test ──────────────────────────────────────────────────────────
 
+// Verbindungstest läuft im Options-Page-Kontext (kein Service Worker) →
+// mTLS-Client-Zertifikate aus dem Browser-Store werden automatisch verwendet.
 elBtnTest.addEventListener('click', async () => {
   const url   = elUrl.value.trim();
   const token = elToken.value.trim();
