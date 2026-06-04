@@ -211,6 +211,9 @@ async function collectInvoicesViaNavigation(tabId, shopId, dateFrom, dateTo) {
     while (pageUrl) {
       if (activeJob?.cancelled) return all;
 
+      // Haupt-Tab auf year-URL navigieren (Sichtbarkeit für den Nutzer)
+      chrome.tabs.update(tabId, { url: pageUrl }).catch(() => {});
+
       // Frischer Tab pro Seite — garantiert saubere Content-Script-Injektion
       const pageTab = await openTab(pageUrl);
       try {
