@@ -151,12 +151,24 @@
     .date-range-custom.visible { display: flex; }
     .date-range-custom label { font-size: 12px; color: #64748b; margin-bottom: 3px; }
 
+    .shop-tag-row {
+      padding: 10px 0;
+      border-bottom: 1px solid #f1f5f9;
+    }
+    .shop-tag-row:last-child { border-bottom: none; padding-bottom: 0; }
+    .shop-tag-row:first-child { padding-top: 0; }
+    .shop-tag-label {
+      font-size: 12px;
+      font-weight: 600;
+      color: #374151;
+      margin-bottom: 6px;
+    }
+
     .tags-container {
       display: flex;
       flex-wrap: wrap;
       gap: 7px;
-      margin-top: 8px;
-      min-height: 32px;
+      min-height: 28px;
     }
     .tag-chip {
       display: inline-flex;
@@ -279,11 +291,30 @@
   <!-- Tags -->
   <div class="card">
     <h2>Paperless-Tags (optional)</h2>
-    <p style="font-size:12px;color:#64748b;margin-bottom:10px;">
-      Tags werden erst geladen, wenn du eine gültige Verbindung gespeichert hast.
+    <p style="font-size:12px;color:#64748b;margin-bottom:12px;">
+      Pro Shop wählbar — Tags werden nach dem Speichern einer gültigen Verbindung geladen.
     </p>
-    <div class="tags-container" id="tagsContainer">
-      <span style="font-size:12px;color:#94a3b8;">Noch keine Tags geladen.</span>
+    <div id="shopTagsList">
+      <div class="shop-tag-row">
+        <div class="shop-tag-label">Amazon</div>
+        <div class="tags-container" id="tags-amazon"><span style="font-size:12px;color:#94a3b8;">Noch keine Tags geladen.</span></div>
+      </div>
+      <div class="shop-tag-row">
+        <div class="shop-tag-label">eBay</div>
+        <div class="tags-container" id="tags-ebay"><span style="font-size:12px;color:#94a3b8;">Noch keine Tags geladen.</span></div>
+      </div>
+      <div class="shop-tag-row">
+        <div class="shop-tag-label">Zalando</div>
+        <div class="tags-container" id="tags-zalando"><span style="font-size:12px;color:#94a3b8;">Noch keine Tags geladen.</span></div>
+      </div>
+      <div class="shop-tag-row">
+        <div class="shop-tag-label">MediaMarkt</div>
+        <div class="tags-container" id="tags-mediamarkt"><span style="font-size:12px;color:#94a3b8;">Noch keine Tags geladen.</span></div>
+      </div>
+      <div class="shop-tag-row">
+        <div class="shop-tag-label">Otto</div>
+        <div class="tags-container" id="tags-otto"><span style="font-size:12px;color:#94a3b8;">Noch keine Tags geladen.</span></div>
+      </div>
     </div>
   </div>
 
