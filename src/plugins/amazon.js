@@ -252,8 +252,47 @@ window.InvoiceFlowPlugin = (() => {
     domains: ['amazon.de','amazon.com','amazon.co.uk','amazon.fr','amazon.it','amazon.es'],
 
     /**
+     * Gibt die Rechnungen der AKTUELL geladenen Seite zurück (nutzt document direkt,
+     * kein fetch — funktioniert auch mit Amazon Client-Side-Decryption).
+     * Gibt außerdem die URL der nächsten Seite zurück (für Pagination via background.js).
+     */
+    async getInvoicesFromCurrentPage(dateFrom, dateTo) {
+      const baseUrl = `https://${window.location.hostname}`;
+
+      if (document.querySelector(_SELECTORS.loginForm)) {
+        throw new Error('Nicht bei Amazon angemeldet. Bitte zuerst auf Amazon einloggen.');
+      }
+
+      const invoices = [];
+      const rawInvoices = _parseOrderCards(document, dateFrom, dateTo, baseUrl);
+
+      for (const inv of rawInvoices) {
+        if (inv.invoiceUrl.startsWith('__DETAIL__:')) {
+          const detailUrl = inv.invoiceUrl.slice('__DETAIL__:'.length);
+          await _sleep(300 + Math.random() * 400);
+          const resolved = await _resolveFromDetailPage(detailUrl, baseUrl).catch(() => null);
+          if (resolved) { inv.invoiceUrl = resolved; invoices.push(inv); }
+        } else if (inv.invoiceUrl.includes('invoice/popover')) {
+          await _sleep(200 + Math.random() * 300);
+          const pdfUrl = await _resolvePopoverToPdf(inv.invoiceUrl, baseUrl).catch(() => null);
+          if (pdfUrl) { inv.invoiceUrl = pdfUrl; invoices.push(inv); }
+        } else {
+          invoices.push(inv);
+        }
+      }
+
+      const nextLink = document.querySelector(_SELECTORS.nextPage);
+      const nextUrl  = nextLink
+        ? (nextLink.href.startsWith('http') ? nextLink.href : baseUrl + nextLink.href)
+        : null;
+
+      return { invoices, nextUrl };
+    },
+
+    /**
      * Gibt alle Rechnungen im Zeitraum [dateFrom, dateTo] zurück.
      * Durchläuft alle relevanten Jahre mit Pagination.
+     * @deprecated Wird durch getInvoicesFromCurrentPage + background-Navigation ersetzt.
      */
     async getInvoices(dateFrom, dateTo) {
       const baseUrl   = `https://${window.location.hostname}`;
