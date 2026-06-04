@@ -1,14 +1,15 @@
 {
   "manifest_version": 3,
   "name": "InvoiceFlow",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Lädt Rechnungen von Amazon, eBay, Zalando & Co automatisch in Paperless-ngx hoch.",
 
   "permissions": [
     "storage",
     "tabs",
     "scripting",
-    "activeTab"
+    "activeTab",
+    "offscreen"
   ],
 
   "host_permissions": [

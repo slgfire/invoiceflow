@@ -89,7 +89,7 @@ jobs:
           VERSION="${{ steps.ver.outputs.version }}"
 
           gh release create "$TAG" \
-            --title "InvoiceFlow ${TAG}" \
+            --title "${TAG}" \
             --generate-notes \
             --verify-tag=false \
             "$ZIP#InvoiceFlow ${VERSION} (Chrome/Edge Extension)"
