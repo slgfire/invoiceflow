@@ -98,7 +98,7 @@ function paperless(action, paperlessUrl, paperlessToken, params = {}) {
 // ─── Haupt-Download-Logik ─────────────────────────────────────────────────────
 
 async function startDownload(config) {
-  const { shops, dateFrom, dateTo, paperlessUrl, paperlessToken, shopTags = {} } = config;
+  const { shops, dateFrom, dateTo, paperlessUrl, paperlessToken, shopTags = {}, shopCustomFields = {} } = config;
 
   await ensureOffscreen();
 
@@ -173,9 +173,10 @@ async function startDownload(config) {
 
           // 4. Upload über Offscreen Document (mTLS)
           await paperless('UPLOAD_DOCUMENT', paperlessUrl, paperlessToken, {
-            dataUrl:  fetchResult.dataUrl,
-            filename: inv.filename,
-            tagIds:   shopTags[shopId] ?? [],
+            dataUrl:      fetchResult.dataUrl,
+            filename:     inv.filename,
+            tagIds:       shopTags[shopId] ?? [],
+            customFields: shopCustomFields[shopId] ?? [],
           });
 
           await addLocalCache(inv.orderId);

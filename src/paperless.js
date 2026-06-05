@@ -36,12 +36,18 @@ export class PaperlessClient {
    * @param {Blob}     blob
    * @param {string}   filename   z.B. "20240315_29,99EUR_amazon_302-xxx.pdf"
    * @param {number[]} tagIds
+   * @param {{fieldId:number, value:string}[]} customFields
    */
-  async uploadDocument(blob, filename, tagIds = []) {
+  async uploadDocument(blob, filename, tagIds = [], customFields = []) {
     const form = new FormData();
     form.append('document', blob, filename);
     form.append('title', filename.replace(/\.pdf$/i, ''));
     tagIds.forEach(id => form.append('tags', String(id)));
+    if (customFields.length > 0) {
+      form.append('custom_fields', JSON.stringify(
+        customFields.map(cf => ({ field: cf.fieldId, value: cf.value }))
+      ));
+    }
 
     const res = await fetch(`${this.baseUrl}/api/documents/post_document/`, {
       method: 'POST',
@@ -61,6 +67,12 @@ export class PaperlessClient {
   /** Gibt alle konfigurierten Tags zurück. */
   async getTags() {
     const data = await this._get('/api/tags/?page_size=500');
+    return data.results ?? [];
+  }
+
+  /** Gibt alle benutzerdefinierten Felder zurück. */
+  async getCustomFields() {
+    const data = await this._get('/api/custom_fields/?page_size=500');
     return data.results ?? [];
   }
 }

@@ -18,13 +18,24 @@ const SHOP_IDS = [
   'linkedin', 'metaads', 'microsoft365', 'openaiapi', 'paypal', 'revolut',
 ];
 
+const SHOP_LABELS = {
+  amazon: 'Amazon', ebay: 'eBay', zalando: 'Zalando',
+  mediamarkt: 'MediaMarkt', otto: 'Otto',
+  aliexpress: 'AliExpress', chatgpt: 'ChatGPT', github: 'GitHub',
+  googleads: 'Google Ads', googlepay: 'Google Pay',
+  linkedin: 'LinkedIn', metaads: 'Meta Ads', microsoft365: 'Microsoft 365',
+  openaiapi: 'OpenAI API', paypal: 'PayPal', revolut: 'Revolut',
+};
+
+let _allCustomFields = [];
+
 // ─── Init ─────────────────────────────────────────────────────────────────────
 
 async function load() {
   const s = await chrome.storage.sync.get([
     'paperlessUrl', 'paperlessToken',
     'defaultDateRange', 'customFrom', 'customTo',
-    'enabledShops', 'shopTags', 'tagIds',
+    'enabledShops', 'shopTags', 'tagIds', 'shopCustomFields',
   ]);
 
   elUrl.value   = s.paperlessUrl   || '';
@@ -51,8 +62,12 @@ async function load() {
     for (const id of SHOP_IDS) shopTags[id] = [...legacyIds];
   }
 
+  // Render custom fields section (initially empty fields list)
+  renderCustomFieldsSection(s.shopCustomFields || {});
+
   if (s.paperlessUrl && s.paperlessToken) {
     await loadAllTags(s.paperlessUrl, s.paperlessToken, shopTags);
+    await loadAllCustomFields(s.paperlessUrl, s.paperlessToken, s.shopCustomFields || {});
   }
 }
 
@@ -186,6 +201,7 @@ elBtnTest.addEventListener('click', async () => {
     if (typeof data.count !== 'number') throw new Error('Keine gültige Paperless-API-Antwort.');
     showStatus('ok', 'Verbindung OK');
     await loadAllTags(url, token, getShopTagIds());
+    await loadAllCustomFields(url, token, getShopCustomFields());
   } catch (e) {
     showStatus('error', e.message);
   } finally {
@@ -228,13 +244,14 @@ elBtnSave.addEventListener('click', async () => {
   }
 
   await chrome.storage.sync.set({
-    paperlessUrl:     url,
-    paperlessToken:   token,
-    defaultDateRange: range,
-    customFrom:       elFrom.value,
-    customTo:         elTo.value,
+    paperlessUrl:      url,
+    paperlessToken:    token,
+    defaultDateRange:  range,
+    customFrom:        elFrom.value,
+    customTo:          elTo.value,
     enabledShops,
-    shopTags:         getShopTagIds(),
+    shopTags:          getShopTagIds(),
+    shopCustomFields:  getShopCustomFields(),
   });
 
   showSaveMsg('ok', 'Gespeichert.');
@@ -255,6 +272,129 @@ function getShopTagIds() {
 function showSaveMsg(type, text) {
   elSaveMsg.className = `save-msg ${type}`;
   elSaveMsg.textContent = text;
+}
+
+// ─── Benutzerdefinierte Felder ────────────────────────────────────────────────
+
+async function loadAllCustomFields(baseUrl, token, savedCustomFields) {
+  try {
+    const url  = baseUrl.replace(/\/+$/, '') + '/api/custom_fields/?page_size=500';
+    const res  = await fetch(url, { headers: { Authorization: `Token ${token}`, Accept: 'application/json' }, credentials: 'include' });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    _allCustomFields = data.results || [];
+  } catch (e) {
+    console.warn('Custom fields konnten nicht geladen werden:', e.message);
+    _allCustomFields = [];
+  }
+  renderCustomFieldsSection(savedCustomFields);
+}
+
+function renderCustomFieldsSection(savedCustomFields) {
+  const container = document.getElementById('shopCustomFieldsList');
+  if (!container) return;
+  container.innerHTML = '';
+
+  for (const shopId of SHOP_IDS) {
+    const block = document.createElement('div');
+    block.className = 'shop-cf-block';
+
+    const header = document.createElement('div');
+    header.className = 'shop-cf-header';
+
+    const label = document.createElement('span');
+    label.className = 'shop-tag-label';
+    label.textContent = SHOP_LABELS[shopId] || shopId;
+
+    const addBtn = document.createElement('button');
+    addBtn.type = 'button';
+    addBtn.className = 'cf-add-btn';
+    addBtn.title = 'Feld hinzufügen';
+    addBtn.textContent = '+';
+    addBtn.addEventListener('click', () => _addCfRow(shopId, null, ''));
+
+    header.appendChild(label);
+    header.appendChild(addBtn);
+
+    const rows = document.createElement('div');
+    rows.className = 'cf-rows';
+    rows.id = `cf-rows-${shopId}`;
+
+    block.appendChild(header);
+    block.appendChild(rows);
+    container.appendChild(block);
+
+    for (const cf of (savedCustomFields[shopId] || [])) {
+      _addCfRow(shopId, cf.fieldId, cf.value);
+    }
+  }
+}
+
+function _addCfRow(shopId, fieldId, value) {
+  const rows = document.getElementById(`cf-rows-${shopId}`);
+  if (!rows) return;
+
+  const row = document.createElement('div');
+  row.className = 'cf-row';
+
+  const sel = document.createElement('select');
+  sel.className = 'cf-field-select';
+  const empty = document.createElement('option');
+  empty.value = '';
+  empty.textContent = '— Feld wählen —';
+  sel.appendChild(empty);
+
+  for (const f of _allCustomFields) {
+    const opt = document.createElement('option');
+    opt.value       = String(f.id);
+    opt.dataset.type = f.data_type;
+    opt.textContent  = f.name;
+    if (String(f.id) === String(fieldId)) opt.selected = true;
+    sel.appendChild(opt);
+  }
+
+  const inp = document.createElement('input');
+  inp.className   = 'cf-value-input';
+  inp.placeholder = 'Wert';
+  inp.value       = value ?? '';
+
+  function syncInputType() {
+    const opt = sel.options[sel.selectedIndex];
+    const dtype = opt?.dataset?.type || 'string';
+    if (dtype === 'date')                           { inp.type = 'date'; inp.placeholder = 'JJJJ-MM-TT'; }
+    else if (dtype === 'integer' || dtype === 'monetary') { inp.type = 'number'; inp.placeholder = 'Zahl'; }
+    else if (dtype === 'boolean')                   { inp.type = 'text'; inp.placeholder = 'true / false'; }
+    else                                             { inp.type = 'text'; inp.placeholder = 'Wert'; }
+  }
+  sel.addEventListener('change', syncInputType);
+  syncInputType();
+
+  const del = document.createElement('button');
+  del.type      = 'button';
+  del.className = 'cf-del-btn';
+  del.title     = 'Entfernen';
+  del.textContent = '×';
+  del.addEventListener('click', () => row.remove());
+
+  row.appendChild(sel);
+  row.appendChild(inp);
+  row.appendChild(del);
+  rows.appendChild(row);
+}
+
+function getShopCustomFields() {
+  const result = {};
+  for (const shopId of SHOP_IDS) {
+    const rows = document.getElementById(`cf-rows-${shopId}`);
+    result[shopId] = rows
+      ? Array.from(rows.querySelectorAll('.cf-row')).flatMap(row => {
+          const fieldId = Number(row.querySelector('.cf-field-select')?.value);
+          const value   = row.querySelector('.cf-value-input')?.value?.trim() ?? '';
+          return fieldId && value !== '' ? [{ fieldId, value }] : [];
+        })
+      : [];
+  }
+  return result;
 }
 
 // ─── Bootstrap ────────────────────────────────────────────────────────────────

@@ -34,11 +34,14 @@ async function handle(msg) {
     case 'GET_TAGS':
       return client.getTags();
 
+    case 'GET_CUSTOM_FIELDS':
+      return client.getCustomFields();
+
     case 'UPLOAD_DOCUMENT': {
       // dataUrl kommt als base64-String vom Content Script via background
       const resp = await fetch(msg.dataUrl);
       const blob = await resp.blob();
-      return client.uploadDocument(blob, msg.filename, msg.tagIds ?? []);
+      return client.uploadDocument(blob, msg.filename, msg.tagIds ?? [], msg.customFields ?? []);
     }
 
     default:

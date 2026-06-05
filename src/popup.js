@@ -103,7 +103,7 @@ elBtnStart.addEventListener('click', async () => {
     return;
   }
 
-  const s = await chrome.storage.sync.get(['paperlessUrl', 'paperlessToken', 'shopTags']);
+  const s = await chrome.storage.sync.get(['paperlessUrl', 'paperlessToken', 'shopTags', 'shopCustomFields']);
   if (!s.paperlessUrl || !s.paperlessToken) {
     chrome.runtime.openOptionsPage();
     return;
@@ -151,9 +151,10 @@ elBtnStart.addEventListener('click', async () => {
       shops,
       dateFrom,
       dateTo,
-      paperlessUrl:   s.paperlessUrl,
-      paperlessToken: s.paperlessToken,
-      shopTags:       s.shopTags || {},
+      paperlessUrl:      s.paperlessUrl,
+      paperlessToken:    s.paperlessToken,
+      shopTags:          s.shopTags || {},
+      shopCustomFields:  s.shopCustomFields || {},
     },
   });
 });
