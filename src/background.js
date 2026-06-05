@@ -128,6 +128,7 @@ async function startDownload(config) {
     try {
       tab = await openTab(SHOP_START_URL[shopId]);
       await waitForTabLoad(tab.id);
+      await waitForLoginIfNeeded(tab.id, shopId, SHOP_START_URL[shopId]);
       await sleep(1200);
 
       emit({ type: 'SHOP_STATUS', shop: shopId, message: 'Lade Bestellliste…' });
@@ -225,6 +226,7 @@ async function collectInvoicesViaNavigation(tabId, shopId, dateFrom, dateTo) {
       // Den einzigen Tab direkt zur gefilterten URL navigieren
       await chrome.tabs.update(tabId, { url: pageUrl });
       await waitForTabLoad(tabId);
+      await waitForLoginIfNeeded(tabId, shopId, pageUrl);
 
       // Aktiv pingen bis Content Script antwortet (hält MV3-Service-Worker am Leben)
       let ready = false;
@@ -245,6 +247,56 @@ async function collectInvoicesViaNavigation(tabId, shopId, dateFrom, dateTo) {
   }
 
   return all;
+}
+
+// ─── Login-Erkennung ─────────────────────────────────────────────────────────
+
+function isLoginRedirect(url) {
+  const u = (url || '').toLowerCase();
+  return (
+    u.includes('/ap/signin')                  ||
+    u.includes('/signin')                     ||
+    u.includes('/sign-in')                    ||
+    u.includes('/login')                      ||
+    u.includes('/s/login')                    ||
+    u.includes('accounts.google.com')         ||
+    u.includes('login.microsoftonline.com')   ||
+    u.includes('signin.ebay.')                ||
+    u.includes('identity.linkedin.com')
+  );
+}
+
+async function waitForLoginIfNeeded(tabId, shopId, intendedUrl) {
+  const tab = await chrome.tabs.get(tabId);
+  if (!isLoginRedirect(tab.url)) return;
+
+  // Tab in den Vordergrund, damit der Nutzer sich einloggen kann
+  await chrome.tabs.update(tabId, { active: true });
+
+  emit({ type: 'NEEDS_LOGIN', shop: shopId,
+         message: `Bitte bei ${shopId} anmelden — Tab ist geöffnet. Wartet bis zu 5 Minuten.` });
+
+  const deadline = Date.now() + 5 * 60 * 1000;
+
+  while (Date.now() < deadline) {
+    await sleep(2000);
+    if (activeJob?.cancelled) throw new Error('Abgebrochen.');
+
+    const current = await chrome.tabs.get(tabId).catch(() => null);
+    if (!current) throw new Error(`Tab für ${shopId} wurde geschlossen.`);
+    if (!isLoginRedirect(current.url)) break;
+  }
+
+  const current = await chrome.tabs.get(tabId).catch(() => null);
+  if (!current || isLoginRedirect(current.url)) {
+    throw new Error(`Login-Timeout für ${shopId} — bitte erneut starten.`);
+  }
+
+  emit({ type: 'LOGIN_SUCCESS', shop: shopId, message: `Angemeldet bei ${shopId}, fahre fort…` });
+
+  // Zurück zur eigentlichen Shop-URL navigieren
+  await chrome.tabs.update(tabId, { url: intendedUrl, active: false });
+  await waitForTabLoad(tabId);
 }
 
 // ─── Hilfsfunktionen ─────────────────────────────────────────────────────────

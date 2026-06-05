@@ -215,6 +215,16 @@ function handleProgress(msg) {
       updateProgress();
       break;
 
+    case 'NEEDS_LOGIN':
+      elCurrentItem.textContent = `Warte auf Login bei ${shopLabel(msg.shop)}…`;
+      appendLog('skip', '🔐', `${shopLabel(msg.shop)}: ${msg.message}`);
+      break;
+
+    case 'LOGIN_SUCCESS':
+      elCurrentItem.textContent = '';
+      appendLog('ok', '✓', msg.message);
+      break;
+
     case 'SHOP_ERROR':
       appendLog('error', '✗', `${shopLabel(msg.shop)}: ${msg.message}`);
       break;
