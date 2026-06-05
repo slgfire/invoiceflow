@@ -28,9 +28,12 @@ window.InvoiceFlowPlugin = (() => {
     // Bestellbetrag
     orderAmount: '.order-header .a-column:nth-child(2) .a-size-base, ' +
                  '.order-header .a-column:nth-child(2) .a-color-secondary',
-    // Direkter Rechnungslink auf der Übersichtsseite
-    invoiceLink: 'a[href*="invoice/getinvoice"], a[href*="/invoice?"], ' +
-                 'a[href*="invoice/print"], a[href*="invoice/popover"]',
+    // Direkter PDF-Link (alter Stil: print.html → PDF)
+    invoiceDirectPdf: 'a[href*="/gp/css/summary/print.html"]',
+    // Popover-Trigger (neuer Stil: span mit JSON in data-a-popover)
+    invoicePopover: 'span[data-a-popover*="invoice/popover"]',
+    // Fallback für ältere Link-Stile
+    invoiceLinkLegacy: 'a[href*="invoice/getinvoice"], a[href*="/invoice?"], a[href*="invoice/print"]',
     // Link zur Detailseite der Bestellung
     detailLink:  'a[href*="order-details"], a[href*="orderID="]',
     // Pagination "Weiter"-Link
@@ -132,23 +135,74 @@ window.InvoiceFlowPlugin = (() => {
   }
 
   /**
-   * Sucht in einem geparsten Dokument nach einem Rechnungslink.
-   * Gibt eine absolute URL zurück oder null.
+   * Sucht in einer Bestellkarte nach einem Rechnungslink.
+   * Gibt { type, url } zurück oder null.
+   *
+   * Methode 1: <a href="/gp/css/summary/print.html?..."> → type "print"
+   * Methode 2: <span data-a-popover='{"url":"/...invoice/popover..."}'>  → type "popover"
+   * Methode 3: Legacy <a href="...invoice/getinvoice...">  → type "direct"
    */
-  function _findInvoiceLink(doc, baseUrl) {
-    const el = doc.querySelector(_SELECTORS.invoiceLink);
-    if (!el) return null;
-    const href = el.getAttribute('href');
-    if (!href) return null;
-    return href.startsWith('http') ? href : baseUrl + href;
+  function _findInvoiceLink(card, baseUrl) {
+    // Methode 1: direkter Print-Link (enthält PDF-Links wenn man ihn lädt)
+    const printEl = card.querySelector(_SELECTORS.invoiceDirectPdf);
+    if (printEl) {
+      const href = printEl.getAttribute('href');
+      if (href) return { type: 'print', url: href.startsWith('http') ? href : baseUrl + href };
+    }
+
+    // Methode 2: Popover via span[data-a-popover]
+    const popoverEl = card.querySelector(_SELECTORS.invoicePopover);
+    if (popoverEl) {
+      try {
+        const raw = popoverEl.getAttribute('data-a-popover')
+          .replace(/&quot;/g, '"').replace(/&amp;/g, '&');
+        const parsed = JSON.parse(raw);
+        if (parsed.url) {
+          const url = parsed.url.startsWith('http') ? parsed.url : baseUrl + parsed.url;
+          return { type: 'popover', url };
+        }
+      } catch (_) {}
+    }
+
+    // Methode 3: Legacy-Links
+    const legacyEl = card.querySelector(_SELECTORS.invoiceLinkLegacy);
+    if (legacyEl) {
+      const href = legacyEl.getAttribute('href');
+      if (href) return { type: 'direct', url: href.startsWith('http') ? href : baseUrl + href };
+    }
+
+    return null;
   }
 
   /**
    * Lädt die Bestelldetailseite und sucht darin nach dem Rechnungslink.
    */
   async function _resolveFromDetailPage(detailUrl, baseUrl) {
-    const doc  = await _fetchDoc(detailUrl);
-    return _findInvoiceLink(doc, baseUrl);
+    const doc = await _fetchDoc(detailUrl);
+    const found = _findInvoiceLink(doc, baseUrl);
+    if (!found) return null;
+    if (found.type === 'print') return _resolvePrintToPdf(found.url, baseUrl);
+    if (found.type === 'popover') return _resolvePopoverToPdf(found.url, baseUrl);
+    return found.url;
+  }
+
+  /**
+   * Lädt eine print.html-Seite und extrahiert den direkten PDF-Link.
+   */
+  async function _resolvePrintToPdf(printUrl, baseUrl) {
+    const resp = await fetch(printUrl, {
+      credentials: 'include',
+      headers: { Accept: 'text/html,*/*', 'Accept-Language': navigator.language || 'de-DE' },
+    });
+    if (!resp.ok) return null;
+    const html = await resp.text();
+    const doc = new DOMParser().parseFromString(html, 'text/html');
+    const pdfLink = doc.querySelector('a[href$=".pdf"]') ||
+                    doc.querySelector('a[href*="documents/download"]') ||
+                    doc.querySelector('a[href*="invoice"]');
+    if (!pdfLink) return printUrl; // Fallback: print.html selbst als PDF-Quelle
+    const href = pdfLink.getAttribute('href');
+    return href.startsWith('http') ? href : baseUrl + href;
   }
 
   /**
@@ -220,14 +274,16 @@ window.InvoiceFlowPlugin = (() => {
       }
 
       // ─── Rechnungslink ──────────────────────────────────────────────────────
-      const directLink = _findInvoiceLink(card, baseUrl);
+      const linkFound = _findInvoiceLink(card, baseUrl);
       let invoiceUrl;
 
-      if (directLink) {
-        invoiceUrl = directLink;
+      if (linkFound) {
+        if (linkFound.type === 'print')   invoiceUrl = `__PRINT__:${linkFound.url}`;
+        else if (linkFound.type === 'popover') invoiceUrl = `__POPOVER__:${linkFound.url}`;
+        else invoiceUrl = linkFound.url;
       } else {
         const detailEl = card.querySelector(_SELECTORS.detailLink);
-        if (!detailEl) continue; // keine Detailseite → überspringen
+        if (!detailEl) continue;
         const href = detailEl.getAttribute('href');
         const detailUrl = href.startsWith('http') ? href : baseUrl + href;
         invoiceUrl = `__DETAIL__:${detailUrl}`;
@@ -289,20 +345,28 @@ window.InvoiceFlowPlugin = (() => {
         };
         setTimeout(check, 400);
       });
+      // Zusätzliche 3s damit CSD alle Karten vollständig rendert (wie Tailride)
+      await _sleep(3000);
 
       const invoices = [];
       const rawInvoices = _parseOrderCards(document, dateFrom, dateTo, baseUrl);
 
       for (const inv of rawInvoices) {
-        if (inv.invoiceUrl.startsWith('__DETAIL__:')) {
+        if (inv.invoiceUrl.startsWith('__PRINT__:')) {
+          const printUrl = inv.invoiceUrl.slice('__PRINT__:'.length);
+          await _sleep(200 + Math.random() * 300);
+          const pdfUrl = await _resolvePrintToPdf(printUrl, baseUrl).catch(() => null);
+          if (pdfUrl) { inv.invoiceUrl = pdfUrl; invoices.push(inv); }
+        } else if (inv.invoiceUrl.startsWith('__POPOVER__:')) {
+          const popoverUrl = inv.invoiceUrl.slice('__POPOVER__:'.length);
+          await _sleep(200 + Math.random() * 300);
+          const pdfUrl = await _resolvePopoverToPdf(popoverUrl, baseUrl).catch(() => null);
+          if (pdfUrl) { inv.invoiceUrl = pdfUrl; invoices.push(inv); }
+        } else if (inv.invoiceUrl.startsWith('__DETAIL__:')) {
           const detailUrl = inv.invoiceUrl.slice('__DETAIL__:'.length);
           await _sleep(300 + Math.random() * 400);
           const resolved = await _resolveFromDetailPage(detailUrl, baseUrl).catch(() => null);
           if (resolved) { inv.invoiceUrl = resolved; invoices.push(inv); }
-        } else if (inv.invoiceUrl.includes('invoice/popover')) {
-          await _sleep(200 + Math.random() * 300);
-          const pdfUrl = await _resolvePopoverToPdf(inv.invoiceUrl, baseUrl).catch(() => null);
-          if (pdfUrl) { inv.invoiceUrl = pdfUrl; invoices.push(inv); }
         } else {
           invoices.push(inv);
         }
@@ -333,8 +397,8 @@ window.InvoiceFlowPlugin = (() => {
 
         while (hasMore) {
           const orderHistoryUrl =
-            `${baseUrl}/gp/your-account/order-history` +
-            `?orderFilter=year-${year}&startIndex=${startIndex}`;
+            `${baseUrl}/gp/css/order-history` +
+            `?timeFilter=year-${year}&startIndex=${startIndex}`;
 
           const doc = await _fetchDoc(orderHistoryUrl);
 
@@ -347,23 +411,23 @@ window.InvoiceFlowPlugin = (() => {
 
           const pageInvoices = _parseOrderCards(doc, dateFrom, dateTo, baseUrl);
 
-          // Detailseiten / Popover für Bestellungen ohne direkten PDF-Link
+          // Detailseiten / Popover / Print für Bestellungen ohne direkten PDF-Link
           for (const inv of pageInvoices) {
-            if (inv.invoiceUrl.startsWith('__DETAIL__:')) {
+            if (inv.invoiceUrl.startsWith('__PRINT__:')) {
+              const printUrl = inv.invoiceUrl.slice('__PRINT__:'.length);
+              await _sleep(200 + Math.random() * 300);
+              const pdfUrl = await _resolvePrintToPdf(printUrl, baseUrl).catch(() => null);
+              if (pdfUrl) { inv.invoiceUrl = pdfUrl; allInvoices.push(inv); }
+            } else if (inv.invoiceUrl.startsWith('__POPOVER__:')) {
+              const popoverUrl = inv.invoiceUrl.slice('__POPOVER__:'.length);
+              await _sleep(200 + Math.random() * 300);
+              const pdfUrl = await _resolvePopoverToPdf(popoverUrl, baseUrl).catch(() => null);
+              if (pdfUrl) { inv.invoiceUrl = pdfUrl; allInvoices.push(inv); }
+            } else if (inv.invoiceUrl.startsWith('__DETAIL__:')) {
               const detailUrl = inv.invoiceUrl.slice('__DETAIL__:'.length);
               await _sleep(300 + Math.random() * 400);
               const resolved = await _resolveFromDetailPage(detailUrl, baseUrl).catch(() => null);
-              if (resolved) {
-                inv.invoiceUrl = resolved;
-                allInvoices.push(inv);
-              }
-            } else if (inv.invoiceUrl.includes('invoice/popover')) {
-              await _sleep(200 + Math.random() * 300);
-              const pdfUrl = await _resolvePopoverToPdf(inv.invoiceUrl, baseUrl).catch(() => null);
-              if (pdfUrl) {
-                inv.invoiceUrl = pdfUrl;
-                allInvoices.push(inv);
-              }
+              if (resolved) { inv.invoiceUrl = resolved; allInvoices.push(inv); }
             } else {
               allInvoices.push(inv);
             }
