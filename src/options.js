@@ -343,9 +343,15 @@ function _buildValueEl(fieldData, currentValue) {
     el.appendChild(placeholder);
     for (const o of opts) {
       const opt = document.createElement('option');
-      opt.value = o;
-      opt.textContent = o;
-      if (o === currentValue) opt.selected = true;
+      if (typeof o === 'string') {
+        opt.value       = o;
+        opt.textContent = o;
+      } else {
+        // Paperless-ngx liefert Objekte: {id, label} oder {value, label}
+        opt.value       = o.id ?? o.value ?? String(o);
+        opt.textContent = o.label ?? o.name ?? opt.value;
+      }
+      if (opt.value === currentValue) opt.selected = true;
       el.appendChild(opt);
     }
     return el;
