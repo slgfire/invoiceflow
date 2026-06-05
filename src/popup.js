@@ -274,6 +274,10 @@ function showSummary({ uploaded, duplicates, errors }) {
 const SHOP_LABELS = {
   amazon: 'Amazon', ebay: 'eBay', zalando: 'Zalando',
   mediamarkt: 'MediaMarkt', otto: 'Otto',
+  aliexpress: 'AliExpress', chatgpt: 'ChatGPT', github: 'GitHub',
+  googleads: 'Google Ads', googlepay: 'Google Pay',
+  linkedin: 'LinkedIn', metaads: 'Meta Ads', microsoft365: 'Microsoft 365',
+  openaiapi: 'OpenAI API', paypal: 'PayPal', revolut: 'Revolut',
 };
 function shopLabel(id) { return SHOP_LABELS[id] || id; }
 

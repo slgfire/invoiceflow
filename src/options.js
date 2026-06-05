@@ -12,7 +12,11 @@ const elCustom  = $('customRangeFields');
 const elFrom    = $('customFrom');
 const elTo      = $('customTo');
 
-const SHOP_IDS = ['amazon', 'ebay', 'zalando', 'mediamarkt', 'otto'];
+const SHOP_IDS = [
+  'amazon', 'ebay', 'zalando', 'mediamarkt', 'otto',
+  'aliexpress', 'chatgpt', 'github', 'googleads', 'googlepay',
+  'linkedin', 'metaads', 'microsoft365', 'openaiapi', 'paypal', 'revolut',
+];
 
 // ─── Init ─────────────────────────────────────────────────────────────────────
 

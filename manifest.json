@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "InvoiceFlow",
-  "version": "0.1.10",
+  "version": "0.1.11",
   "description": "Lädt Rechnungen von Amazon, eBay, Zalando & Co automatisch in Paperless-ngx hoch.",
 
   "permissions": [
@@ -27,7 +27,20 @@
     "*://*.ebay.de/*",
     "*://*.zalando.de/*",
     "*://*.mediamarkt.de/*",
-    "*://*.otto.de/*"
+    "*://*.otto.de/*",
+    "*://*.aliexpress.com/*",
+    "*://pay.openai.com/*",
+    "*://platform.openai.com/*",
+    "*://invoicedata.stripe.com/*",
+    "*://github.com/*",
+    "*://ads.google.com/*",
+    "*://payments.google.com/*",
+    "*://www.linkedin.com/*",
+    "*://business.facebook.com/*",
+    "*://admin.microsoft.com/*",
+    "*://admin.cloud.microsoft/*",
+    "*://www.paypal.com/*",
+    "*://business.revolut.com/*"
   ],
 
   "background": {
@@ -83,6 +96,61 @@
     {
       "matches": ["*://*.otto.de/*"],
       "js": ["src/content.js", "src/plugins/otto.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["*://*.aliexpress.com/*"],
+      "js": ["src/content.js", "src/plugins/aliexpress.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["*://pay.openai.com/*"],
+      "js": ["src/content.js", "src/plugins/chatgpt.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["*://github.com/*"],
+      "js": ["src/content.js", "src/plugins/github.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["*://ads.google.com/*"],
+      "js": ["src/content.js", "src/plugins/googleads.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["*://payments.google.com/*"],
+      "js": ["src/content.js", "src/plugins/googlepay.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["*://www.linkedin.com/*"],
+      "js": ["src/content.js", "src/plugins/linkedin.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["*://business.facebook.com/*"],
+      "js": ["src/content.js", "src/plugins/metaads.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["*://admin.microsoft.com/*"],
+      "js": ["src/content.js", "src/plugins/microsoft365.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["*://platform.openai.com/*"],
+      "js": ["src/content.js", "src/plugins/openaiapi.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["*://www.paypal.com/*"],
+      "js": ["src/content.js", "src/plugins/paypal.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["*://business.revolut.com/*"],
+      "js": ["src/content.js", "src/plugins/revolut.js"],
       "run_at": "document_idle"
     }
   ]
