@@ -211,24 +211,24 @@ async function collectInvoicesViaNavigation(tabId, shopId, dateFrom, dateTo) {
     while (pageUrl) {
       if (activeJob?.cancelled) return all;
 
-      // Haupt-Tab auf year-URL navigieren (Sichtbarkeit für den Nutzer)
-      chrome.tabs.update(tabId, { url: pageUrl }).catch(() => {});
+      // Den einzigen Tab direkt zur gefilterten URL navigieren
+      await chrome.tabs.update(tabId, { url: pageUrl });
+      await waitForTabLoad(tabId);
 
-      // Frischer Tab pro Seite — garantiert saubere Content-Script-Injektion
-      const pageTab = await openTab(pageUrl);
-      try {
-        await waitForTabLoad(pageTab.id);
-        await sleep(4000); // CSD-Rendering abwarten
-
-        const result = await sendToTab(pageTab.id, { action: 'GET_INVOICES_PAGE', dateFrom, dateTo }, 45_000);
-        if (result.error) throw new Error(result.error);
-
-        all.push(...(result.invoices ?? []));
-        pageUrl = result.nextUrl || null;
-      } finally {
-        await chrome.tabs.remove(pageTab.id).catch(() => {});
+      // Aktiv pingen bis Content Script antwortet (hält MV3-Service-Worker am Leben)
+      let ready = false;
+      for (let attempt = 0; attempt < 20 && !ready; attempt++) {
+        await chrome.storage.local.get('_'); // Chrome-API-Call: SW bleibt aktiv
+        const ping = await sendToTab(tabId, { action: 'PING' }, 3000).catch(() => null);
+        if (ping?.ok) ready = true;
       }
+      if (!ready) throw new Error('Content Script nicht bereit nach 20 Versuchen');
 
+      const result = await sendToTab(tabId, { action: 'GET_INVOICES_PAGE', dateFrom, dateTo }, 45_000);
+      if (result.error) throw new Error(result.error);
+
+      all.push(...(result.invoices ?? []));
+      pageUrl = result.nextUrl || null;
       if (pageUrl) await sleep(800 + Math.random() * 400);
     }
   }
