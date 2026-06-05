@@ -9,7 +9,7 @@ let progressPort = null;
 // ─── Start-URLs je Shop ───────────────────────────────────────────────────────
 
 const SHOP_START_URL = {
-  amazon:     'https://www.amazon.de/gp/your-account/order-history',
+  amazon:     'https://www.amazon.de/gp/css/order-history',
   ebay:       'https://www.ebay.de/mye/myebay/purchase',
   zalando:    'https://www.zalando.de/myaccount/orders',
   mediamarkt: 'https://www.mediamarkt.de/de/myaccount/orders',
@@ -200,13 +200,13 @@ async function collectInvoicesViaNavigation(tabId, shopId, dateFrom, dateTo) {
   const all      = [];
 
   const baseUrls = {
-    amazon: 'https://www.amazon.de/gp/your-account/order-history',
+    amazon: 'https://www.amazon.de/gp/css/order-history',
   };
   const base = baseUrls[shopId];
   if (!base) return all;
 
   for (let year = yearTo; year >= yearFrom; year--) {
-    let pageUrl = `${base}?orderFilter=year-${year}`;
+    let pageUrl = `${base}?timeFilter=year-${year}`;
 
     while (pageUrl) {
       if (activeJob?.cancelled) return all;
