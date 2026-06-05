@@ -44,9 +44,10 @@ export class PaperlessClient {
     form.append('title', filename.replace(/\.pdf$/i, ''));
     tagIds.forEach(id => form.append('tags', String(id)));
     if (customFields.length > 0) {
-      form.append('custom_fields', JSON.stringify(
-        customFields.map(cf => ({ field: cf.fieldId, value: cf.value }))
-      ));
+      // Paperless erwartet {"<fieldId>": "<value>"} als JSON-String
+      const cfObj = {};
+      for (const cf of customFields) cfObj[String(cf.fieldId)] = cf.value;
+      form.append('custom_fields', JSON.stringify(cfObj));
     }
 
     const res = await fetch(`${this.baseUrl}/api/documents/post_document/`, {
