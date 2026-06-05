@@ -16,11 +16,11 @@ A Chrome / Edge browser extension (Manifest V3) that automatically downloads inv
 | Otto | otto.de |
 | AliExpress | aliexpress.com |
 | GitHub | github.com/billing |
-| PayPal | paypal.com |
 
 ### Services & Subscriptions
 | Service | Domain |
 |---|---|
+| PayPal | paypal.com |
 | ChatGPT | pay.openai.com |
 | Google Ads | ads.google.com |
 | Google Pay | payments.google.com |
@@ -233,6 +233,9 @@ No data is sent to any third party.
 ---
 
 ## Changelog
+
+### v0.2.5
+- Moved PayPal from "Online Shops" to "Services" section in popup and settings
 
 ### v0.2.4
 - Fixed custom fields upload format for Paperless `post_document` API (`{"id": "value"}` object)
