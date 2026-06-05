@@ -330,6 +330,51 @@ function renderCustomFieldsSection(savedCustomFields) {
   }
 }
 
+function _buildValueEl(fieldData, currentValue) {
+  const dtype = fieldData?.data_type || 'string';
+
+  if (dtype === 'select') {
+    const opts = fieldData.extra_data?.select_options || [];
+    const el   = document.createElement('select');
+    el.className = 'cf-value-input';
+    const placeholder = document.createElement('option');
+    placeholder.value = '';
+    placeholder.textContent = '— Option wählen —';
+    el.appendChild(placeholder);
+    for (const o of opts) {
+      const opt = document.createElement('option');
+      opt.value = o;
+      opt.textContent = o;
+      if (o === currentValue) opt.selected = true;
+      el.appendChild(opt);
+    }
+    return el;
+  }
+
+  if (dtype === 'boolean') {
+    const el = document.createElement('select');
+    el.className = 'cf-value-input';
+    [['', '— wählen —'], ['true', 'Ja (true)'], ['false', 'Nein (false)']].forEach(([v, t]) => {
+      const opt = document.createElement('option');
+      opt.value = v; opt.textContent = t;
+      if (v === currentValue) opt.selected = true;
+      el.appendChild(opt);
+    });
+    return el;
+  }
+
+  const inp = document.createElement('input');
+  inp.className = 'cf-value-input';
+  inp.value     = currentValue ?? '';
+  if      (dtype === 'date')          { inp.type = 'date';   inp.placeholder = 'JJJJ-MM-TT'; }
+  else if (dtype === 'integer')       { inp.type = 'number'; inp.step = '1';    inp.placeholder = 'Zahl'; }
+  else if (dtype === 'monetary')      { inp.type = 'number'; inp.step = '0.01'; inp.placeholder = '0,00'; }
+  else if (dtype === 'url')           { inp.type = 'url';    inp.placeholder = 'https://…'; }
+  else if (dtype === 'document_link') { inp.type = 'number'; inp.step = '1';    inp.placeholder = 'Dokument-ID'; }
+  else                                { inp.type = 'text';   inp.placeholder = 'Wert'; }
+  return inp;
+}
+
 function _addCfRow(shopId, fieldId, value) {
   const rows = document.getElementById(`cf-rows-${shopId}`);
   if (!rows) return;
@@ -337,47 +382,46 @@ function _addCfRow(shopId, fieldId, value) {
   const row = document.createElement('div');
   row.className = 'cf-row';
 
+  // ── Feld-Auswahl ──
   const sel = document.createElement('select');
   sel.className = 'cf-field-select';
   const empty = document.createElement('option');
-  empty.value = '';
-  empty.textContent = '— Feld wählen —';
+  empty.value = ''; empty.textContent = '— Feld wählen —';
   sel.appendChild(empty);
-
   for (const f of _allCustomFields) {
     const opt = document.createElement('option');
     opt.value       = String(f.id);
-    opt.dataset.type = f.data_type;
-    opt.textContent  = f.name;
+    opt.textContent = f.name;
     if (String(f.id) === String(fieldId)) opt.selected = true;
     sel.appendChild(opt);
   }
 
-  const inp = document.createElement('input');
-  inp.className   = 'cf-value-input';
-  inp.placeholder = 'Wert';
-  inp.value       = value ?? '';
+  // ── Wert-Container (Inhalt wechselt je nach Typ) ──
+  const valWrap = document.createElement('div');
+  valWrap.className = 'cf-value-wrap';
 
-  function syncInputType() {
-    const opt = sel.options[sel.selectedIndex];
-    const dtype = opt?.dataset?.type || 'string';
-    if (dtype === 'date')                           { inp.type = 'date'; inp.placeholder = 'JJJJ-MM-TT'; }
-    else if (dtype === 'integer' || dtype === 'monetary') { inp.type = 'number'; inp.placeholder = 'Zahl'; }
-    else if (dtype === 'boolean')                   { inp.type = 'text'; inp.placeholder = 'true / false'; }
-    else                                             { inp.type = 'text'; inp.placeholder = 'Wert'; }
+  function syncValueEl() {
+    const fid  = sel.value;
+    const fd   = _allCustomFields.find(f => String(f.id) === fid) || null;
+    const prev = valWrap.querySelector('.cf-value-input')?.value ?? '';
+    valWrap.innerHTML = '';
+    valWrap.appendChild(_buildValueEl(fd, prev));
   }
-  sel.addEventListener('change', syncInputType);
-  syncInputType();
 
+  sel.addEventListener('change', syncValueEl);
+
+  // Initiales Rendern mit gespeichertem Wert
+  const initFd = _allCustomFields.find(f => String(f.id) === String(fieldId)) || null;
+  valWrap.appendChild(_buildValueEl(initFd, value ?? ''));
+
+  // ── Löschen ──
   const del = document.createElement('button');
-  del.type      = 'button';
-  del.className = 'cf-del-btn';
-  del.title     = 'Entfernen';
-  del.textContent = '×';
+  del.type = 'button'; del.className = 'cf-del-btn';
+  del.title = 'Entfernen'; del.textContent = '×';
   del.addEventListener('click', () => row.remove());
 
   row.appendChild(sel);
-  row.appendChild(inp);
+  row.appendChild(valWrap);
   row.appendChild(del);
   rows.appendChild(row);
 }
