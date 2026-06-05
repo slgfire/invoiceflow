@@ -9,11 +9,22 @@ let progressPort = null;
 // ─── Start-URLs je Shop ───────────────────────────────────────────────────────
 
 const SHOP_START_URL = {
-  amazon:     'https://www.amazon.de/gp/css/order-history',
-  ebay:       'https://www.ebay.de/mye/myebay/purchase',
-  zalando:    'https://www.zalando.de/myaccount/orders',
-  mediamarkt: 'https://www.mediamarkt.de/de/myaccount/orders',
-  otto:       'https://www.otto.de/meinekonto/bestellungen',
+  amazon:       'https://www.amazon.de/gp/css/order-history',
+  ebay:         'https://www.ebay.de/mye/myebay/purchase',
+  zalando:      'https://www.zalando.de/myaccount/orders',
+  mediamarkt:   'https://www.mediamarkt.de/de/myaccount/orders',
+  otto:         'https://www.otto.de/meinekonto/bestellungen',
+  aliexpress:   'https://www.aliexpress.com/p/order/index.html',
+  chatgpt:      'https://pay.openai.com/',
+  github:       'https://github.com/billing/history',
+  googleads:    'https://ads.google.com/aw/billing/documents',
+  googlepay:    'https://payments.google.com/payments/home#transactions',
+  linkedin:     'https://www.linkedin.com/billing/invoices',
+  metaads:      'https://business.facebook.com/billing_hub/payment_activity',
+  microsoft365: 'https://admin.microsoft.com/Adminportal/Home#/billoverview',
+  openaiapi:    'https://platform.openai.com/settings/organization/billing/history',
+  paypal:       'https://www.paypal.com/reports/accountStatements',
+  revolut:      'https://business.revolut.com/billing',
 };
 
 // Shops mit Amazon-CSD-Problem: Tab-Navigation statt internes fetch()
