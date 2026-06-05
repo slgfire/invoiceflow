@@ -263,6 +263,33 @@ window.InvoiceFlowPlugin = (() => {
         throw new Error('Nicht bei Amazon angemeldet. Bitte zuerst auf Amazon einloggen.');
       }
 
+      // Amazon CSD rendert Bestellkarten asynchron nach document_complete.
+      // Warten bis mindestens eine Karte sichtbar ist (max. 20s).
+      await new Promise(resolve => {
+        const deadline = Date.now() + 20_000;
+        const noOrdersSelectors = [
+          '.no-orders-section', '[data-test-id="no-orders"]',
+          '.a-alert-info',
+        ];
+        const check = () => {
+          const cards = document.querySelectorAll(_SELECTORS.orderCard);
+          if (cards.length > 0) {
+            console.log(`[InvoiceFlow] CSD fertig — ${cards.length} Karte(n) auf ${window.location.href}`);
+            return resolve();
+          }
+          if (noOrdersSelectors.some(s => document.querySelector(s))) {
+            console.log(`[InvoiceFlow] Keine Bestellungen auf ${window.location.href}`);
+            return resolve();
+          }
+          if (Date.now() >= deadline) {
+            console.warn(`[InvoiceFlow] CSD-Timeout auf ${window.location.href}`);
+            return resolve();
+          }
+          setTimeout(check, 400);
+        };
+        setTimeout(check, 400);
+      });
+
       const invoices = [];
       const rawInvoices = _parseOrderCards(document, dateFrom, dateTo, baseUrl);
 
