@@ -1,5 +1,5 @@
-// Kein direkter PaperlessClient-Import mehr — alle Paperless-Calls laufen
-// über das Offscreen Document (mTLS-fähiger fetch()-Kontext).
+// Kein direkter Client-Import — alle API-/WebDAV-Calls laufen
+// über das Offscreen Document (btoa + optionale mTLS-Unterstützung).
 
 // ─── State ───────────────────────────────────────────────────────────────────
 
@@ -64,8 +64,8 @@ async function ensureOffscreen() {
     await chrome.offscreen.createDocument({
       url:           'offscreen.html',
       reasons:       [chrome.offscreen.Reason.BLOBS],
-      justification: 'Paperless API-Calls benötigen mTLS-Unterstützung — ' +
-                     'nur im Rendering-Kontext verfügbar, nicht im Service Worker.',
+      justification: 'Nextcloud WebDAV-Calls benötigen btoa() und optionale mTLS-Unterstützung — ' +
+                     'zuverlässig nur im Rendering-Kontext verfügbar.',
     });
   }
 }
@@ -76,12 +76,15 @@ async function closeOffscreen() {
 }
 
 /**
- * Sendet einen Paperless-Aufruf an das Offscreen Document und wartet auf die Antwort.
+ * Sendet einen Aufruf an das Offscreen Document und wartet auf die Antwort.
+ * @param {string} action
+ * @param {object} settings  Backend-spezifische Credentials inkl. `backend`-Feld
+ * @param {object} params    Zusätzliche Felder (z.B. dataUrl, filename)
  */
-function paperless(action, paperlessUrl, paperlessToken, params = {}) {
+function callOffscreen(action, settings, params = {}) {
   return new Promise((resolve, reject) => {
     chrome.runtime.sendMessage(
-      { target: 'offscreen', action, paperlessUrl, paperlessToken, ...params },
+      { target: 'offscreen', action, ...settings, ...params },
       response => {
         if (chrome.runtime.lastError) {
           reject(new Error(chrome.runtime.lastError.message));
@@ -98,19 +101,29 @@ function paperless(action, paperlessUrl, paperlessToken, params = {}) {
 // ─── Haupt-Download-Logik ─────────────────────────────────────────────────────
 
 async function startDownload(config) {
-  const { shops, dateFrom, dateTo, paperlessUrl, paperlessToken, shopTags = {}, shopCustomFields = {} } = config;
+  const {
+    shops, dateFrom, dateTo,
+    uploadBackend = 'nextcloud',
+    paperlessUrl, paperlessToken, shopTags = {}, shopCustomFields = {},
+    ncUrl, ncUser, ncPassword, ncFolder,
+  } = config;
+
+  const isPaperless = uploadBackend === 'paperless';
+  const backendSettings = isPaperless
+    ? { backend: 'paperless', paperlessUrl, paperlessToken }
+    : { backend: 'nextcloud', ncUrl, ncUser, ncPassword, ncFolder };
 
   await ensureOffscreen();
 
-  emit({ type: 'STATUS', message: 'Verbinde mit Paperless-ngx…' });
+  emit({ type: 'STATUS', message: isPaperless ? 'Verbinde mit Paperless-ngx…' : 'Verbinde mit Nextcloud…' });
   try {
-    await paperless('TEST_CONNECTION', paperlessUrl, paperlessToken);
+    await callOffscreen('TEST_CONNECTION', backendSettings);
   } catch (e) {
-    emit({ type: 'FATAL', message: `Paperless nicht erreichbar: ${e.message}` });
+    emit({ type: 'FATAL', message: `${isPaperless ? 'Paperless' : 'Nextcloud'} nicht erreichbar: ${e.message}` });
     await closeOffscreen();
     return;
   }
-  emit({ type: 'STATUS', message: 'Paperless-Verbindung OK.' });
+  emit({ type: 'STATUS', message: isPaperless ? 'Paperless-Verbindung OK.' : 'Nextcloud-Verbindung OK.' });
 
   activeJob = { cancelled: false };
 
@@ -150,20 +163,22 @@ async function startDownload(config) {
         emit({ type: 'INVOICE_PROCESSING', shop: shopId, filename: inv.filename, current: i + 1, total: invoices.length });
 
         try {
-          // 1. Lokaler Cache
+          // 1. Lokaler Cache (Primär-Dedup)
           if (await isLocalCached(inv.orderId)) {
             emit({ type: 'INVOICE_SKIP', filename: inv.filename, reason: 'cache' });
             totalDuplicates++;
             continue;
           }
 
-          // 2. Paperless-Duplikatprüfung (läuft im Offscreen → mTLS)
-          const exists = await paperless('CHECK_DUPLICATE', paperlessUrl, paperlessToken, { orderId: inv.orderId });
-          if (exists) {
-            await addLocalCache(inv.orderId);
-            emit({ type: 'INVOICE_SKIP', filename: inv.filename, reason: 'paperless' });
-            totalDuplicates++;
-            continue;
+          // 2. Paperless-Duplikatprüfung (nur bei Paperless-Backend)
+          if (isPaperless) {
+            const exists = await callOffscreen('CHECK_DUPLICATE', backendSettings, { orderId: inv.orderId });
+            if (exists) {
+              await addLocalCache(inv.orderId);
+              emit({ type: 'INVOICE_SKIP', filename: inv.filename, reason: 'paperless' });
+              totalDuplicates++;
+              continue;
+            }
           }
 
           // 3. PDF vom Shop laden (Content Script im Tab → Session-Cookies)
@@ -171,13 +186,20 @@ async function startDownload(config) {
           if (fetchResult.error) throw new Error(fetchResult.error);
           if (fetchResult.dataUrl.length < 500) throw new Error('PDF zu klein — kein gültiges Dokument.');
 
-          // 4. Upload über Offscreen Document (mTLS)
-          await paperless('UPLOAD_DOCUMENT', paperlessUrl, paperlessToken, {
-            dataUrl:      fetchResult.dataUrl,
-            filename:     inv.filename,
-            tagIds:       shopTags[shopId] ?? [],
-            customFields: shopCustomFields[shopId] ?? [],
-          });
+          // 4. Upload
+          if (isPaperless) {
+            await callOffscreen('UPLOAD_DOCUMENT', backendSettings, {
+              dataUrl:      fetchResult.dataUrl,
+              filename:     inv.filename,
+              tagIds:       shopTags[shopId] ?? [],
+              customFields: shopCustomFields[shopId] ?? [],
+            });
+          } else {
+            await callOffscreen('UPLOAD_DOCUMENT', backendSettings, {
+              dataUrl:  fetchResult.dataUrl,
+              filename: inv.filename,
+            });
+          }
 
           await addLocalCache(inv.orderId);
           emit({ type: 'INVOICE_UPLOADED', filename: inv.filename });

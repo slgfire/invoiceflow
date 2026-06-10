@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "InvoiceFlow",
-  "version": "0.2.5",
-  "description": "Lädt Rechnungen von Amazon, eBay, Zalando & Co automatisch in Paperless-ngx hoch.",
+  "name": "InvoiceFlow for Nextcloud",
+  "version": "0.3.0",
+  "description": "Lädt Rechnungen von Amazon, eBay, Zalando & Co automatisch via WebDAV in einen Nextcloud-Ordner (z.B. Paperless consume-Verzeichnis).",
 
   "permissions": [
     "storage",

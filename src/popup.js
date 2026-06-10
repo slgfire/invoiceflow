@@ -53,13 +53,21 @@ elDateTo.addEventListener('input',   () => { elYearSelect.value = ''; });
 // ─── Load saved settings ──────────────────────────────────────────────────────
 
 async function loadSettings() {
-  const s = await chrome.storage.sync.get([
-    'paperlessUrl', 'paperlessToken',
-    'defaultDateRange', 'customFrom', 'customTo',
-    'enabledShops',
+  const [s, local] = await Promise.all([
+    chrome.storage.sync.get([
+      'uploadBackend',
+      'ncUrl', 'ncUser', 'ncFolder',
+      'paperlessUrl', 'paperlessToken',
+      'defaultDateRange', 'customFrom', 'customTo',
+      'enabledShops',
+    ]),
+    chrome.storage.local.get(['ncPassword']),
   ]);
 
-  const hasCreds = !!(s.paperlessUrl && s.paperlessToken);
+  const backend   = s.uploadBackend || 'nextcloud';
+  const hasCreds  = backend === 'paperless'
+    ? !!(s.paperlessUrl && s.paperlessToken)
+    : !!(s.ncUrl && s.ncUser && local.ncPassword);
   elNoConfig.style.display = hasCreds ? 'none' : 'block';
 
   // Vorauswahl der Shops aus gespeicherten Einstellungen
@@ -103,8 +111,22 @@ elBtnStart.addEventListener('click', async () => {
     return;
   }
 
-  const s = await chrome.storage.sync.get(['paperlessUrl', 'paperlessToken', 'shopTags', 'shopCustomFields']);
-  if (!s.paperlessUrl || !s.paperlessToken) {
+  const [s, local] = await Promise.all([
+    chrome.storage.sync.get([
+      'uploadBackend',
+      'ncUrl', 'ncUser', 'ncFolder',
+      'paperlessUrl', 'paperlessToken',
+      'shopTags', 'shopCustomFields',
+    ]),
+    chrome.storage.local.get(['ncPassword']),
+  ]);
+
+  const backend = s.uploadBackend || 'nextcloud';
+  const hasCreds = backend === 'paperless'
+    ? !!(s.paperlessUrl && s.paperlessToken)
+    : !!(s.ncUrl && s.ncUser && local.ncPassword);
+
+  if (!hasCreds) {
     chrome.runtime.openOptionsPage();
     return;
   }
@@ -151,10 +173,15 @@ elBtnStart.addEventListener('click', async () => {
       shops,
       dateFrom,
       dateTo,
-      paperlessUrl:      s.paperlessUrl,
-      paperlessToken:    s.paperlessToken,
-      shopTags:          s.shopTags || {},
-      shopCustomFields:  s.shopCustomFields || {},
+      uploadBackend:     backend,
+      paperlessUrl:      s.paperlessUrl      || '',
+      paperlessToken:    s.paperlessToken     || '',
+      shopTags:          s.shopTags           || {},
+      shopCustomFields:  s.shopCustomFields   || {},
+      ncUrl:             s.ncUrl              || '',
+      ncUser:            s.ncUser             || '',
+      ncPassword:        local.ncPassword     || '',
+      ncFolder:          s.ncFolder           || '',
     },
   });
 });

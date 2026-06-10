@@ -2,15 +2,26 @@
 
 const $ = id => document.getElementById(id);
 
-const elUrl     = $('paperlessUrl');
-const elToken   = $('paperlessToken');
-const elBtnTest = $('btnTest');
-const elStatus  = $('connectionStatus');
-const elBtnSave = $('btnSave');
-const elSaveMsg = $('saveMsg');
-const elCustom  = $('customRangeFields');
-const elFrom    = $('customFrom');
-const elTo      = $('customTo');
+// Nextcloud
+const elNcUrl      = $('ncUrl');
+const elNcUser     = $('ncUser');
+const elNcPassword = $('ncPassword');
+const elNcFolder   = $('ncFolder');
+const elBtnTestNc  = $('btnTest');
+const elStatusNc   = $('connectionStatus');
+
+// Paperless
+const elPlUrl      = $('paperlessUrl');
+const elPlToken    = $('paperlessToken');
+const elBtnTestPl  = $('btnTestPaperless');
+const elStatusPl   = $('connectionStatusPaperless');
+
+// Gemeinsam
+const elBtnSave  = $('btnSave');
+const elSaveMsg  = $('saveMsg');
+const elCustom   = $('customRangeFields');
+const elFrom     = $('customFrom');
+const elTo       = $('customTo');
 
 const SHOP_IDS = [
   'amazon', 'ebay', 'zalando', 'mediamarkt', 'otto',
@@ -29,17 +40,41 @@ const SHOP_LABELS = {
 
 let _allCustomFields = [];
 
+// ─── Backend-Toggle ───────────────────────────────────────────────────────────
+
+function setBackend(value) {
+  document.body.dataset.backend = value;
+  const radio = document.querySelector(`input[name="uploadBackend"][value="${value}"]`);
+  if (radio) radio.checked = true;
+}
+
+document.querySelectorAll('input[name="uploadBackend"]').forEach(el => {
+  el.addEventListener('change', e => setBackend(e.target.value));
+});
+
 // ─── Init ─────────────────────────────────────────────────────────────────────
 
 async function load() {
-  const s = await chrome.storage.sync.get([
-    'paperlessUrl', 'paperlessToken',
-    'defaultDateRange', 'customFrom', 'customTo',
-    'enabledShops', 'shopTags', 'tagIds', 'shopCustomFields',
+  const [s, local] = await Promise.all([
+    chrome.storage.sync.get([
+      'uploadBackend',
+      'ncUrl', 'ncUser', 'ncFolder',
+      'paperlessUrl', 'paperlessToken',
+      'defaultDateRange', 'customFrom', 'customTo',
+      'enabledShops', 'shopTags', 'tagIds', 'shopCustomFields',
+    ]),
+    chrome.storage.local.get(['ncPassword']),
   ]);
 
-  elUrl.value   = s.paperlessUrl   || '';
-  elToken.value = s.paperlessToken || '';
+  setBackend(s.uploadBackend || 'nextcloud');
+
+  elNcUrl.value      = s.ncUrl     || '';
+  elNcUser.value     = s.ncUser    || '';
+  elNcPassword.value = local.ncPassword || '';
+  elNcFolder.value   = s.ncFolder  || '';
+
+  elPlUrl.value   = s.paperlessUrl   || '';
+  elPlToken.value = s.paperlessToken || '';
 
   const range = s.defaultDateRange || 'currentYear';
   const radio = document.querySelector(`input[name="dateRange"][value="${range}"]`);
@@ -55,14 +90,13 @@ async function load() {
     if (el) el.checked = Boolean(enabled[id] ?? false);
   }
 
-  // Migrate legacy tagIds → shopTags (apply to all shops as default)
+  // Paperless-Tags laden (nur wenn Paperless-URL + Token vorhanden)
   const legacyIds = s.tagIds || [];
   const shopTags  = s.shopTags || {};
   if (legacyIds.length > 0 && Object.keys(shopTags).length === 0) {
     for (const id of SHOP_IDS) shopTags[id] = [...legacyIds];
   }
 
-  // Render custom fields section (initially empty fields list)
   renderCustomFieldsSection(s.shopCustomFields || {});
 
   if (s.paperlessUrl && s.paperlessToken) {
@@ -81,7 +115,137 @@ document.querySelectorAll('input[name="dateRange"]').forEach(el => {
   el.addEventListener('change', e => toggleCustomRange(e.target.value));
 });
 
-// ─── Tags ─────────────────────────────────────────────────────────────────────
+// ─── Host-Permission ──────────────────────────────────────────────────────────
+
+async function requestHostPermission(url) {
+  try {
+    const origin  = new URL(url).origin + '/*';
+    const granted = await chrome.permissions.request({ origins: [origin] });
+    return granted;
+  } catch {
+    return false;
+  }
+}
+
+async function hasHostPermission(url) {
+  try {
+    const origin = new URL(url).origin + '/*';
+    return chrome.permissions.contains({ origins: [origin] });
+  } catch {
+    return false;
+  }
+}
+
+// ─── Nextcloud-Verbindungstest ────────────────────────────────────────────────
+
+elBtnTestNc.addEventListener('click', async () => {
+  const url      = elNcUrl.value.trim();
+  const user     = elNcUser.value.trim();
+  const password = elNcPassword.value.trim();
+  const folder   = elNcFolder.value.trim();
+
+  if (!url || !user || !password) {
+    showStatus(elStatusNc, 'error', 'URL, Benutzername und App-Passwort eingeben.');
+    return;
+  }
+
+  const already = await hasHostPermission(url);
+  if (!already) {
+    showStatus(elStatusNc, 'testing', 'Bitte Zugriff auf Nextcloud-URL erlauben…');
+    const granted = await requestHostPermission(url);
+    if (!granted) {
+      showStatus(elStatusNc, 'error', 'Zugriff verweigert — CORS-Anfragen werden blockiert.');
+      return;
+    }
+  }
+
+  showStatus(elStatusNc, 'testing', 'Teste Verbindung…');
+  elBtnTestNc.disabled = true;
+
+  try {
+    const davRoot  = url.replace(/\/+$/, '') + '/remote.php/dav/files/' + encodeURIComponent(user);
+    const testPath = folder
+      ? folder.split('/').filter(Boolean).map(encodeURIComponent).join('/')
+      : '';
+    const testUrl  = testPath ? `${davRoot}/${testPath}` : davRoot;
+
+    const res = await fetch(testUrl, {
+      method:  'PROPFIND',
+      headers: { Authorization: 'Basic ' + btoa(`${user}:${password}`), Depth: '0' },
+    });
+
+    if (res.status === 401) throw new Error('Authentifizierung fehlgeschlagen — Benutzername oder App-Passwort falsch.');
+    if (res.status === 403) throw new Error('Zugriff verweigert — keine Berechtigung.');
+    if (res.status === 404) {
+      showStatus(elStatusNc, 'error', `Ordner nicht gefunden: "${folder || '/'}" — Pfad prüfen.`);
+      return;
+    }
+    if (res.status !== 207 && !res.ok) throw new Error(`Nextcloud antwortet mit HTTP ${res.status}`);
+
+    showStatus(elStatusNc, 'ok', 'Verbindung OK');
+  } catch (e) {
+    showStatus(elStatusNc, 'error', e.message);
+  } finally {
+    elBtnTestNc.disabled = false;
+  }
+});
+
+// ─── Paperless-Verbindungstest ────────────────────────────────────────────────
+
+elBtnTestPl.addEventListener('click', async () => {
+  const url   = elPlUrl.value.trim();
+  const token = elPlToken.value.trim();
+
+  if (!url || !token) {
+    showStatus(elStatusPl, 'error', 'URL und Token eingeben.');
+    return;
+  }
+
+  const already = await hasHostPermission(url);
+  if (!already) {
+    showStatus(elStatusPl, 'testing', 'Bitte Zugriff auf Paperless-URL erlauben…');
+    const granted = await requestHostPermission(url);
+    if (!granted) {
+      showStatus(elStatusPl, 'error', 'Zugriff verweigert — CORS-Anfragen werden blockiert.');
+      return;
+    }
+  }
+
+  showStatus(elStatusPl, 'testing', 'Teste Verbindung…');
+  elBtnTestPl.disabled = true;
+
+  try {
+    const res      = await fetch(url.replace(/\/+$/, '') + '/api/documents/?page_size=1', {
+      headers: { Authorization: `Token ${token}`, Accept: 'application/json' },
+      credentials: 'include',
+    });
+    const bodyText = await res.text();
+
+    if (!res.ok) throw new Error(`HTTP ${res.status} — ${bodyText.slice(0, 120).replace(/\s+/g, ' ')}`);
+
+    let data;
+    try { data = JSON.parse(bodyText); } catch {
+      throw new Error(`Keine JSON-Antwort (HTTP ${res.status}). Server antwortete: ${bodyText.slice(0, 120).replace(/\s+/g, ' ')}`);
+    }
+    if (typeof data.count !== 'number') throw new Error('Keine gültige Paperless-API-Antwort.');
+
+    showStatus(elStatusPl, 'ok', 'Verbindung OK');
+    await loadAllTags(url, token, getShopTagIds());
+    await loadAllCustomFields(url, token, getShopCustomFields());
+  } catch (e) {
+    showStatus(elStatusPl, 'error', e.message);
+  } finally {
+    elBtnTestPl.disabled = false;
+  }
+});
+
+function showStatus(el, type, text) {
+  el.style.display = 'inline-flex';
+  el.className     = `connection-status status-${type}`;
+  el.textContent   = text;
+}
+
+// ─── Paperless Tags ───────────────────────────────────────────────────────────
 
 async function loadAllTags(baseUrl, token, shopTags) {
   const placeholder = '<span style="font-size:12px;color:#94a3b8;">Lade Tags…</span>';
@@ -127,154 +291,7 @@ async function loadAllTags(baseUrl, token, shopTags) {
   }
 }
 
-// ─── Connection test ──────────────────────────────────────────────────────────
-
-// ─── Host-Permission für Paperless-URL anfordern ─────────────────────────────
-// Ohne diese Erlaubnis blockiert der Browser CORS-Anfragen von der Extension
-// an die Paperless-URL (chrome-extension:// Origin ist nicht erlaubt).
-// chrome.permissions.request() muss durch eine User-Geste ausgelöst werden.
-
-async function requestHostPermission(url) {
-  try {
-    const origin  = new URL(url).origin + '/*';
-    const granted = await chrome.permissions.request({ origins: [origin] });
-    return granted;
-  } catch {
-    return false;
-  }
-}
-
-async function hasHostPermission(url) {
-  try {
-    const origin = new URL(url).origin + '/*';
-    return chrome.permissions.contains({ origins: [origin] });
-  } catch {
-    return false;
-  }
-}
-
-// Verbindungstest — fordert zuerst Host-Permission an (CORS-Fix), dann Test.
-elBtnTest.addEventListener('click', async () => {
-  const url   = elUrl.value.trim();
-  const token = elToken.value.trim();
-
-  if (!url || !token) {
-    showStatus('error', 'URL und Token eingeben.');
-    return;
-  }
-
-  // Host-Permission sicherstellen (einmaliger Browser-Dialog)
-  const already = await hasHostPermission(url);
-  if (!already) {
-    showStatus('testing', 'Bitte Zugriff auf Paperless-URL erlauben…');
-    const granted = await requestHostPermission(url);
-    if (!granted) {
-      showStatus('error', 'Zugriff verweigert — CORS-Anfragen werden blockiert.');
-      return;
-    }
-  }
-
-  showStatus('testing', 'Teste Verbindung…');
-  elBtnTest.disabled = true;
-
-  try {
-    const res = await fetch(url.replace(/\/+$/, '') + '/api/documents/?page_size=1', {
-      headers: { Authorization: `Token ${token}`, Accept: 'application/json' },
-      credentials: 'include',
-    });
-
-    const bodyText = await res.text();
-
-    if (!res.ok) {
-      const snippet = bodyText.slice(0, 120).replace(/\s+/g, ' ');
-      throw new Error(`HTTP ${res.status} — ${snippet}`);
-    }
-
-    let data;
-    try {
-      data = JSON.parse(bodyText);
-    } catch {
-      const snippet = bodyText.slice(0, 120).replace(/\s+/g, ' ');
-      throw new Error(`Keine JSON-Antwort (HTTP ${res.status}). Server antwortete: ${snippet}`);
-    }
-
-    if (typeof data.count !== 'number') throw new Error('Keine gültige Paperless-API-Antwort.');
-    showStatus('ok', 'Verbindung OK');
-    await loadAllTags(url, token, getShopTagIds());
-    await loadAllCustomFields(url, token, getShopCustomFields());
-  } catch (e) {
-    showStatus('error', e.message);
-  } finally {
-    elBtnTest.disabled = false;
-  }
-});
-
-function showStatus(type, text) {
-  elStatus.style.display = 'inline-flex';
-  elStatus.className = `connection-status status-${type}`;
-  elStatus.textContent = text;
-}
-
-// ─── Save ─────────────────────────────────────────────────────────────────────
-
-elBtnSave.addEventListener('click', async () => {
-  const url   = elUrl.value.trim();
-  const token = elToken.value.trim();
-
-  if (!url || !token) {
-    showSaveMsg('error', 'Bitte URL und Token angeben.');
-    return;
-  }
-
-  // Host-Permission für die Paperless-URL sicherstellen
-  const already = await hasHostPermission(url);
-  if (!already) {
-    const granted = await requestHostPermission(url);
-    if (!granted) {
-      showSaveMsg('error', 'Zugriff auf Paperless-URL nicht erteilt — Verbindung wird fehlschlagen.');
-      return;
-    }
-  }
-
-  const range       = document.querySelector('input[name="dateRange"]:checked')?.value || 'currentYear';
-  const enabledShops = {};
-  for (const id of SHOP_IDS) {
-    const el = document.getElementById(`shop${id.charAt(0).toUpperCase() + id.slice(1)}`);
-    enabledShops[id] = el ? el.checked : false;
-  }
-
-  await chrome.storage.sync.set({
-    paperlessUrl:      url,
-    paperlessToken:    token,
-    defaultDateRange:  range,
-    customFrom:        elFrom.value,
-    customTo:          elTo.value,
-    enabledShops,
-    shopTags:          getShopTagIds(),
-    shopCustomFields:  getShopCustomFields(),
-  });
-
-  showSaveMsg('ok', 'Gespeichert.');
-  setTimeout(() => { elSaveMsg.textContent = ''; }, 3000);
-});
-
-function getShopTagIds() {
-  const result = {};
-  for (const shopId of SHOP_IDS) {
-    const container = document.getElementById(`tags-${shopId}`);
-    result[shopId] = container
-      ? Array.from(container.querySelectorAll('input[type="checkbox"]:checked')).map(el => Number(el.value))
-      : [];
-  }
-  return result;
-}
-
-function showSaveMsg(type, text) {
-  elSaveMsg.className = `save-msg ${type}`;
-  elSaveMsg.textContent = text;
-}
-
-// ─── Benutzerdefinierte Felder ────────────────────────────────────────────────
+// ─── Paperless Custom Fields ──────────────────────────────────────────────────
 
 async function loadAllCustomFields(baseUrl, token, savedCustomFields) {
   try {
@@ -296,21 +313,18 @@ function renderCustomFieldsSection(savedCustomFields) {
   container.innerHTML = '';
 
   for (const shopId of SHOP_IDS) {
-    const block = document.createElement('div');
+    const block  = document.createElement('div');
     block.className = 'shop-cf-block';
 
     const header = document.createElement('div');
     header.className = 'shop-cf-header';
 
     const label = document.createElement('span');
-    label.className = 'shop-tag-label';
+    label.className   = 'shop-tag-label';
     label.textContent = SHOP_LABELS[shopId] || shopId;
 
     const addBtn = document.createElement('button');
-    addBtn.type = 'button';
-    addBtn.className = 'cf-add-btn';
-    addBtn.title = 'Feld hinzufügen';
-    addBtn.textContent = '+';
+    addBtn.type = 'button'; addBtn.className = 'cf-add-btn'; addBtn.title = 'Feld hinzufügen'; addBtn.textContent = '+';
     addBtn.addEventListener('click', () => _addCfRow(shopId, null, ''));
 
     header.appendChild(label);
@@ -318,7 +332,7 @@ function renderCustomFieldsSection(savedCustomFields) {
 
     const rows = document.createElement('div');
     rows.className = 'cf-rows';
-    rows.id = `cf-rows-${shopId}`;
+    rows.id        = `cf-rows-${shopId}`;
 
     block.appendChild(header);
     block.appendChild(rows);
@@ -338,19 +352,12 @@ function _buildValueEl(fieldData, currentValue) {
     const el   = document.createElement('select');
     el.className = 'cf-value-input';
     const placeholder = document.createElement('option');
-    placeholder.value = '';
-    placeholder.textContent = '— Option wählen —';
+    placeholder.value = ''; placeholder.textContent = '— Option wählen —';
     el.appendChild(placeholder);
     for (const o of opts) {
       const opt = document.createElement('option');
-      if (typeof o === 'string') {
-        opt.value       = o;
-        opt.textContent = o;
-      } else {
-        // Paperless-ngx liefert Objekte: {id, label} oder {value, label}
-        opt.value       = o.id ?? o.value ?? String(o);
-        opt.textContent = o.label ?? o.name ?? opt.value;
-      }
+      if (typeof o === 'string') { opt.value = o; opt.textContent = o; }
+      else { opt.value = o.id ?? o.value ?? String(o); opt.textContent = o.label ?? o.name ?? opt.value; }
       if (opt.value === currentValue) opt.selected = true;
       el.appendChild(opt);
     }
@@ -388,7 +395,6 @@ function _addCfRow(shopId, fieldId, value) {
   const row = document.createElement('div');
   row.className = 'cf-row';
 
-  // ── Feld-Auswahl ──
   const sel = document.createElement('select');
   sel.className = 'cf-field-select';
   const empty = document.createElement('option');
@@ -402,7 +408,6 @@ function _addCfRow(shopId, fieldId, value) {
     sel.appendChild(opt);
   }
 
-  // ── Wert-Container (Inhalt wechselt je nach Typ) ──
   const valWrap = document.createElement('div');
   valWrap.className = 'cf-value-wrap';
 
@@ -413,23 +418,30 @@ function _addCfRow(shopId, fieldId, value) {
     valWrap.innerHTML = '';
     valWrap.appendChild(_buildValueEl(fd, prev));
   }
-
   sel.addEventListener('change', syncValueEl);
 
-  // Initiales Rendern mit gespeichertem Wert
   const initFd = _allCustomFields.find(f => String(f.id) === String(fieldId)) || null;
   valWrap.appendChild(_buildValueEl(initFd, value ?? ''));
 
-  // ── Löschen ──
   const del = document.createElement('button');
-  del.type = 'button'; del.className = 'cf-del-btn';
-  del.title = 'Entfernen'; del.textContent = '×';
+  del.type = 'button'; del.className = 'cf-del-btn'; del.title = 'Entfernen'; del.textContent = '×';
   del.addEventListener('click', () => row.remove());
 
   row.appendChild(sel);
   row.appendChild(valWrap);
   row.appendChild(del);
   rows.appendChild(row);
+}
+
+function getShopTagIds() {
+  const result = {};
+  for (const shopId of SHOP_IDS) {
+    const container = document.getElementById(`tags-${shopId}`);
+    result[shopId] = container
+      ? Array.from(container.querySelectorAll('input[type="checkbox"]:checked')).map(el => Number(el.value))
+      : [];
+  }
+  return result;
 }
 
 function getShopCustomFields() {
@@ -445,6 +457,80 @@ function getShopCustomFields() {
       : [];
   }
   return result;
+}
+
+// ─── Speichern ────────────────────────────────────────────────────────────────
+
+elBtnSave.addEventListener('click', async () => {
+  const backend = document.querySelector('input[name="uploadBackend"]:checked')?.value || 'nextcloud';
+
+  // Validierung je nach Backend
+  if (backend === 'nextcloud') {
+    const url = elNcUrl.value.trim();
+    const user = elNcUser.value.trim();
+    const pw   = elNcPassword.value.trim();
+    if (!url || !user || !pw) {
+      showSaveMsg('error', 'Bitte Nextcloud-URL, Benutzername und App-Passwort angeben.');
+      return;
+    }
+    const already = await hasHostPermission(url);
+    if (!already) {
+      const granted = await requestHostPermission(url);
+      if (!granted) {
+        showSaveMsg('error', 'Zugriff auf Nextcloud-URL nicht erteilt — Verbindung wird fehlschlagen.');
+        return;
+      }
+    }
+  } else {
+    const url   = elPlUrl.value.trim();
+    const token = elPlToken.value.trim();
+    if (!url || !token) {
+      showSaveMsg('error', 'Bitte Paperless-URL und API-Token angeben.');
+      return;
+    }
+    const already = await hasHostPermission(url);
+    if (!already) {
+      const granted = await requestHostPermission(url);
+      if (!granted) {
+        showSaveMsg('error', 'Zugriff auf Paperless-URL nicht erteilt — Verbindung wird fehlschlagen.');
+        return;
+      }
+    }
+  }
+
+  const range = document.querySelector('input[name="dateRange"]:checked')?.value || 'currentYear';
+  const enabledShops = {};
+  for (const id of SHOP_IDS) {
+    const el = document.getElementById(`shop${id.charAt(0).toUpperCase() + id.slice(1)}`);
+    enabledShops[id] = el ? el.checked : false;
+  }
+
+  await Promise.all([
+    chrome.storage.sync.set({
+      uploadBackend:     backend,
+      ncUrl:             elNcUrl.value.trim(),
+      ncUser:            elNcUser.value.trim(),
+      ncFolder:          elNcFolder.value.trim(),
+      paperlessUrl:      elPlUrl.value.trim(),
+      paperlessToken:    elPlToken.value.trim(),
+      defaultDateRange:  range,
+      customFrom:        elFrom.value,
+      customTo:          elTo.value,
+      enabledShops,
+      shopTags:          getShopTagIds(),
+      shopCustomFields:  getShopCustomFields(),
+    }),
+    // ncPassword nur lokal — nicht über Google-Konto synchronisieren
+    chrome.storage.local.set({ ncPassword: elNcPassword.value.trim() }),
+  ]);
+
+  showSaveMsg('ok', 'Gespeichert.');
+  setTimeout(() => { elSaveMsg.textContent = ''; }, 3000);
+});
+
+function showSaveMsg(type, text) {
+  elSaveMsg.className   = `save-msg ${type}`;
+  elSaveMsg.textContent = text;
 }
 
 // ─── Bootstrap ────────────────────────────────────────────────────────────────
