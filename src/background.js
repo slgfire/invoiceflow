@@ -1,4 +1,4 @@
-// Kein direkter NextcloudClient-Import — alle WebDAV-Calls laufen
+// Kein direkter Client-Import — alle API-/WebDAV-Calls laufen
 // über das Offscreen Document (btoa + optionale mTLS-Unterstützung).
 
 // ─── State ───────────────────────────────────────────────────────────────────
@@ -76,15 +76,15 @@ async function closeOffscreen() {
 }
 
 /**
- * Sendet einen WebDAV-Aufruf an das Offscreen Document und wartet auf die Antwort.
+ * Sendet einen Aufruf an das Offscreen Document und wartet auf die Antwort.
  * @param {string} action
- * @param {{ncUrl:string, ncUser:string, ncPassword:string, ncFolder:string}} ncSettings
- * @param {object} params  Zusätzliche Felder (z.B. dataUrl, filename)
+ * @param {object} settings  Backend-spezifische Credentials inkl. `backend`-Feld
+ * @param {object} params    Zusätzliche Felder (z.B. dataUrl, filename)
  */
-function callOffscreen(action, ncSettings, params = {}) {
+function callOffscreen(action, settings, params = {}) {
   return new Promise((resolve, reject) => {
     chrome.runtime.sendMessage(
-      { target: 'offscreen', action, ...ncSettings, ...params },
+      { target: 'offscreen', action, ...settings, ...params },
       response => {
         if (chrome.runtime.lastError) {
           reject(new Error(chrome.runtime.lastError.message));
@@ -101,20 +101,29 @@ function callOffscreen(action, ncSettings, params = {}) {
 // ─── Haupt-Download-Logik ─────────────────────────────────────────────────────
 
 async function startDownload(config) {
-  const { shops, dateFrom, dateTo, ncUrl, ncUser, ncPassword, ncFolder } = config;
-  const ncSettings = { ncUrl, ncUser, ncPassword, ncFolder };
+  const {
+    shops, dateFrom, dateTo,
+    uploadBackend = 'nextcloud',
+    paperlessUrl, paperlessToken, shopTags = {}, shopCustomFields = {},
+    ncUrl, ncUser, ncPassword, ncFolder,
+  } = config;
+
+  const isPaperless = uploadBackend === 'paperless';
+  const backendSettings = isPaperless
+    ? { backend: 'paperless', paperlessUrl, paperlessToken }
+    : { backend: 'nextcloud', ncUrl, ncUser, ncPassword, ncFolder };
 
   await ensureOffscreen();
 
-  emit({ type: 'STATUS', message: 'Verbinde mit Nextcloud…' });
+  emit({ type: 'STATUS', message: isPaperless ? 'Verbinde mit Paperless-ngx…' : 'Verbinde mit Nextcloud…' });
   try {
-    await callOffscreen('TEST_CONNECTION', ncSettings);
+    await callOffscreen('TEST_CONNECTION', backendSettings);
   } catch (e) {
-    emit({ type: 'FATAL', message: `Nextcloud nicht erreichbar: ${e.message}` });
+    emit({ type: 'FATAL', message: `${isPaperless ? 'Paperless' : 'Nextcloud'} nicht erreichbar: ${e.message}` });
     await closeOffscreen();
     return;
   }
-  emit({ type: 'STATUS', message: 'Nextcloud-Verbindung OK.' });
+  emit({ type: 'STATUS', message: isPaperless ? 'Paperless-Verbindung OK.' : 'Nextcloud-Verbindung OK.' });
 
   activeJob = { cancelled: false };
 
@@ -161,16 +170,36 @@ async function startDownload(config) {
             continue;
           }
 
-          // 2. PDF vom Shop laden (Content Script im Tab → Session-Cookies)
+          // 2. Paperless-Duplikatprüfung (nur bei Paperless-Backend)
+          if (isPaperless) {
+            const exists = await callOffscreen('CHECK_DUPLICATE', backendSettings, { orderId: inv.orderId });
+            if (exists) {
+              await addLocalCache(inv.orderId);
+              emit({ type: 'INVOICE_SKIP', filename: inv.filename, reason: 'paperless' });
+              totalDuplicates++;
+              continue;
+            }
+          }
+
+          // 3. PDF vom Shop laden (Content Script im Tab → Session-Cookies)
           const fetchResult = await sendToTab(tab.id, { action: 'FETCH_INVOICE', url: inv.invoiceUrl }, 45_000);
           if (fetchResult.error) throw new Error(fetchResult.error);
           if (fetchResult.dataUrl.length < 500) throw new Error('PDF zu klein — kein gültiges Dokument.');
 
-          // 3. Upload via WebDAV ins Nextcloud consume-Verzeichnis
-          await callOffscreen('UPLOAD_DOCUMENT', ncSettings, {
-            dataUrl:  fetchResult.dataUrl,
-            filename: inv.filename,
-          });
+          // 4. Upload
+          if (isPaperless) {
+            await callOffscreen('UPLOAD_DOCUMENT', backendSettings, {
+              dataUrl:      fetchResult.dataUrl,
+              filename:     inv.filename,
+              tagIds:       shopTags[shopId] ?? [],
+              customFields: shopCustomFields[shopId] ?? [],
+            });
+          } else {
+            await callOffscreen('UPLOAD_DOCUMENT', backendSettings, {
+              dataUrl:  fetchResult.dataUrl,
+              filename: inv.filename,
+            });
+          }
 
           await addLocalCache(inv.orderId);
           emit({ type: 'INVOICE_UPLOADED', filename: inv.filename });

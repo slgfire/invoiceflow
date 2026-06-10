@@ -272,6 +272,36 @@
     .save-msg { font-size: 12px; }
     .save-msg.ok    { color: #16a34a; }
     .save-msg.error { color: #dc2626; }
+
+    /* Backend-spezifische Abschnitte */
+    body[data-backend="paperless"] .nc-only   { display: none; }
+    body[data-backend="nextcloud"]  .pl-only  { display: none; }
+
+    /* Backend-Toggle */
+    .backend-toggle {
+      display: flex;
+      gap: 8px;
+    }
+    .backend-option {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 10px 14px;
+      border: 2px solid #e5e7eb;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 500;
+      transition: border-color .15s, background .15s;
+    }
+    .backend-option:has(input:checked) {
+      border-color: #2563eb;
+      background: #eff6ff;
+      color: #1d4ed8;
+    }
+    .backend-option input { display: none; }
   </style>
 </head>
 <body>
@@ -282,8 +312,42 @@
     <h1>InvoiceFlow — Einstellungen</h1>
   </div>
 
-  <!-- Nextcloud -->
+  <!-- Upload-Backend -->
   <div class="card">
+    <h2>Upload-Backend</h2>
+    <div class="backend-toggle">
+      <label class="backend-option">
+        <input type="radio" name="uploadBackend" value="paperless">
+        <span>📄 Paperless-ngx</span>
+      </label>
+      <label class="backend-option">
+        <input type="radio" name="uploadBackend" value="nextcloud" checked>
+        <span>☁️ Nextcloud WebDAV</span>
+      </label>
+    </div>
+  </div>
+
+  <!-- Paperless-ngx (nur bei Backend = paperless) -->
+  <div class="card pl-only">
+    <h2>Paperless-ngx</h2>
+
+    <div class="field">
+      <label for="paperlessUrl">Server-URL</label>
+      <input type="url" id="paperlessUrl" placeholder="https://paperless.example.com">
+    </div>
+
+    <div class="field">
+      <label for="paperlessToken">API-Token</label>
+      <div class="input-row">
+        <input type="password" id="paperlessToken" placeholder="Token aus Paperless-Einstellungen">
+        <button class="btn btn-secondary" id="btnTestPaperless">Verbindung testen</button>
+        <span id="connectionStatusPaperless" style="display:none" class="connection-status"></span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Nextcloud (nur bei Backend = nextcloud) -->
+  <div class="card nc-only">
     <h2>Nextcloud</h2>
 
     <div class="field">
@@ -425,6 +489,42 @@
         <span>Revolut</span>
       </label>
     </div>
+  </div>
+
+  <!-- Tags (nur bei Backend = paperless) -->
+  <div class="card pl-only">
+    <h2>Paperless-Tags (optional)</h2>
+    <p style="font-size:12px;color:#64748b;margin-bottom:12px;">
+      Pro Shop wählbar — Tags werden nach dem Speichern einer gültigen Verbindung geladen.
+    </p>
+    <div id="shopTagsList">
+      <div class="shop-tag-row"><div class="shop-tag-label">Amazon</div><div class="tags-container" id="tags-amazon"><span style="font-size:12px;color:#94a3b8;">Noch keine Tags geladen.</span></div></div>
+      <div class="shop-tag-row"><div class="shop-tag-label">eBay</div><div class="tags-container" id="tags-ebay"><span style="font-size:12px;color:#94a3b8;">Noch keine Tags geladen.</span></div></div>
+      <div class="shop-tag-row"><div class="shop-tag-label">Zalando</div><div class="tags-container" id="tags-zalando"><span style="font-size:12px;color:#94a3b8;">Noch keine Tags geladen.</span></div></div>
+      <div class="shop-tag-row"><div class="shop-tag-label">MediaMarkt</div><div class="tags-container" id="tags-mediamarkt"><span style="font-size:12px;color:#94a3b8;">Noch keine Tags geladen.</span></div></div>
+      <div class="shop-tag-row"><div class="shop-tag-label">Otto</div><div class="tags-container" id="tags-otto"><span style="font-size:12px;color:#94a3b8;">Noch keine Tags geladen.</span></div></div>
+      <div class="shop-tag-row"><div class="shop-tag-label">AliExpress</div><div class="tags-container" id="tags-aliexpress"><span style="font-size:12px;color:#94a3b8;">Noch keine Tags geladen.</span></div></div>
+      <div class="shop-tag-row"><div class="shop-tag-label">ChatGPT</div><div class="tags-container" id="tags-chatgpt"><span style="font-size:12px;color:#94a3b8;">Noch keine Tags geladen.</span></div></div>
+      <div class="shop-tag-row"><div class="shop-tag-label">GitHub</div><div class="tags-container" id="tags-github"><span style="font-size:12px;color:#94a3b8;">Noch keine Tags geladen.</span></div></div>
+      <div class="shop-tag-row"><div class="shop-tag-label">Google Ads</div><div class="tags-container" id="tags-googleads"><span style="font-size:12px;color:#94a3b8;">Noch keine Tags geladen.</span></div></div>
+      <div class="shop-tag-row"><div class="shop-tag-label">Google Pay</div><div class="tags-container" id="tags-googlepay"><span style="font-size:12px;color:#94a3b8;">Noch keine Tags geladen.</span></div></div>
+      <div class="shop-tag-row"><div class="shop-tag-label">LinkedIn</div><div class="tags-container" id="tags-linkedin"><span style="font-size:12px;color:#94a3b8;">Noch keine Tags geladen.</span></div></div>
+      <div class="shop-tag-row"><div class="shop-tag-label">Meta Ads</div><div class="tags-container" id="tags-metaads"><span style="font-size:12px;color:#94a3b8;">Noch keine Tags geladen.</span></div></div>
+      <div class="shop-tag-row"><div class="shop-tag-label">Microsoft 365</div><div class="tags-container" id="tags-microsoft365"><span style="font-size:12px;color:#94a3b8;">Noch keine Tags geladen.</span></div></div>
+      <div class="shop-tag-row"><div class="shop-tag-label">OpenAI API</div><div class="tags-container" id="tags-openaiapi"><span style="font-size:12px;color:#94a3b8;">Noch keine Tags geladen.</span></div></div>
+      <div class="shop-tag-row"><div class="shop-tag-label">PayPal</div><div class="tags-container" id="tags-paypal"><span style="font-size:12px;color:#94a3b8;">Noch keine Tags geladen.</span></div></div>
+      <div class="shop-tag-row"><div class="shop-tag-label">Revolut</div><div class="tags-container" id="tags-revolut"><span style="font-size:12px;color:#94a3b8;">Noch keine Tags geladen.</span></div></div>
+    </div>
+  </div>
+
+  <!-- Benutzerdefinierte Felder (nur bei Backend = paperless) -->
+  <div class="card pl-only">
+    <h2>Benutzerdefinierte Felder <span style="font-size:11px;color:#94a3b8;font-weight:400;text-transform:none;">(optional)</span></h2>
+    <p style="font-size:12px;color:#64748b;margin-bottom:12px;">
+      Pro Shop konfigurierbar — Felder werden nach dem Speichern einer gültigen Verbindung geladen.
+      Mit <strong>+</strong> ein neues Feld hinzufügen.
+    </p>
+    <div id="shopCustomFieldsList"></div>
   </div>
 
   <!-- Speichern -->
