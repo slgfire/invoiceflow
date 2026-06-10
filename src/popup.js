@@ -53,13 +53,16 @@ elDateTo.addEventListener('input',   () => { elYearSelect.value = ''; });
 // ─── Load saved settings ──────────────────────────────────────────────────────
 
 async function loadSettings() {
-  const s = await chrome.storage.sync.get([
-    'paperlessUrl', 'paperlessToken',
-    'defaultDateRange', 'customFrom', 'customTo',
-    'enabledShops',
+  const [s, local] = await Promise.all([
+    chrome.storage.sync.get([
+      'ncUrl', 'ncUser', 'ncFolder',
+      'defaultDateRange', 'customFrom', 'customTo',
+      'enabledShops',
+    ]),
+    chrome.storage.local.get(['ncPassword']),
   ]);
 
-  const hasCreds = !!(s.paperlessUrl && s.paperlessToken);
+  const hasCreds = !!(s.ncUrl && s.ncUser && local.ncPassword);
   elNoConfig.style.display = hasCreds ? 'none' : 'block';
 
   // Vorauswahl der Shops aus gespeicherten Einstellungen
@@ -103,8 +106,11 @@ elBtnStart.addEventListener('click', async () => {
     return;
   }
 
-  const s = await chrome.storage.sync.get(['paperlessUrl', 'paperlessToken', 'shopTags', 'shopCustomFields']);
-  if (!s.paperlessUrl || !s.paperlessToken) {
+  const [s, local] = await Promise.all([
+    chrome.storage.sync.get(['ncUrl', 'ncUser', 'ncFolder']),
+    chrome.storage.local.get(['ncPassword']),
+  ]);
+  if (!s.ncUrl || !s.ncUser || !local.ncPassword) {
     chrome.runtime.openOptionsPage();
     return;
   }
@@ -151,10 +157,10 @@ elBtnStart.addEventListener('click', async () => {
       shops,
       dateFrom,
       dateTo,
-      paperlessUrl:      s.paperlessUrl,
-      paperlessToken:    s.paperlessToken,
-      shopTags:          s.shopTags || {},
-      shopCustomFields:  s.shopCustomFields || {},
+      ncUrl:      s.ncUrl,
+      ncUser:     s.ncUser,
+      ncPassword: local.ncPassword,
+      ncFolder:   s.ncFolder || '',
     },
   });
 });
@@ -206,7 +212,7 @@ function handleProgress(msg) {
 
     case 'INVOICE_SKIP':
       jobDone++;
-      appendLog('skip', '⟳', `${msg.filename} (bereits in ${msg.reason === 'paperless' ? 'Paperless' : 'Cache'})`);
+      appendLog('skip', '⟳', `${msg.filename} (bereits verarbeitet)`);
       updateProgress();
       break;
 

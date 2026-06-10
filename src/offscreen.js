@@ -2,13 +2,14 @@
  * InvoiceFlow — Offscreen Document
  *
  * Läuft im normalen Browser-Rendering-Kontext, nicht im Service Worker.
- * Dadurch unterstützt fetch() hier Client-Zertifikate für mTLS.
+ * Dadurch unterstützt fetch() hier Client-Zertifikate für mTLS — und
+ * btoa() ist ohne Weiteres verfügbar.
  *
- * Der Service Worker (background.js) sendet alle Paperless-API-Aufrufe
+ * Der Service Worker (background.js) sendet alle Nextcloud-WebDAV-Aufrufe
  * als Nachrichten hierher und bekommt die Ergebnisse zurück.
  */
 
-import { PaperlessClient } from './paperless.js';
+import { NextcloudClient } from './nextcloud.js';
 
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   if (msg.target !== 'offscreen') return false;
@@ -21,27 +22,18 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
 });
 
 async function handle(msg) {
-  const client = new PaperlessClient(msg.paperlessUrl, msg.paperlessToken);
+  const client = new NextcloudClient(msg.ncUrl, msg.ncUser, msg.ncPassword, msg.ncFolder);
 
   switch (msg.action) {
 
     case 'TEST_CONNECTION':
       return client.testConnection();
 
-    case 'CHECK_DUPLICATE':
-      return client.checkDuplicate(msg.orderId);
-
-    case 'GET_TAGS':
-      return client.getTags();
-
-    case 'GET_CUSTOM_FIELDS':
-      return client.getCustomFields();
-
     case 'UPLOAD_DOCUMENT': {
-      // dataUrl kommt als base64-String vom Content Script via background
+      // dataUrl kommt als base64-Data-URL vom Content Script via background
       const resp = await fetch(msg.dataUrl);
       const blob = await resp.blob();
-      return client.uploadDocument(blob, msg.filename, msg.tagIds ?? [], msg.customFields ?? []);
+      return client.uploadDocument(blob, msg.filename);
     }
 
     default:
